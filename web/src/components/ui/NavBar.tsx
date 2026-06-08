@@ -14,6 +14,8 @@ interface NavBarProps {
   onNavigateHeaven?: () => void;
   signOutHref?: string;
   currentPath?: 'home' | 'heaven' | 'group';
+  /** 6ix's Heaven is the owner's private room — only show its nav entry to admins. */
+  showHeaven?: boolean;
 }
 
 export function NavBar({
@@ -23,6 +25,7 @@ export function NavBar({
   onNavigateHeaven,
   signOutHref = '/signout',
   currentPath = 'home',
+  showHeaven = false,
 }: NavBarProps) {
   const [userOpen, setUserOpen] = useState(false);
   const userRef = useRef<HTMLDivElement>(null);
@@ -48,19 +51,21 @@ export function NavBar({
       </button>
 
       <div className="flex items-center gap-2">
-        <button
-          onClick={onNavigateHeaven}
-          className={`relative flex items-center gap-1.5 rounded-[3px] px-3 py-1.5 text-[0.6875rem] tracking-[0.18em] uppercase transition-all duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c084fc] ${
-            currentPath === 'heaven'
-              ? 'bg-[#c084fc]/10 border border-[#c084fc]/30 text-[#c084fc]'
-              : 'border border-white/[0.08] text-[#737373] hover:border-[#c084fc]/25 hover:text-[#c084fc] hover:bg-[#c084fc]/5'
-          }`}
-        >
-          <svg width="9" height="9" viewBox="0 0 9 9" fill="currentColor">
-            <polygon points="4.5,0.5 5.7,3.2 8.6,3.4 6.5,5.3 7.1,8.1 4.5,6.6 1.9,8.1 2.5,5.3 0.4,3.4 3.3,3.2" />
-          </svg>
-          6ix&rsquo;s Heaven
-        </button>
+        {showHeaven && (
+          <button
+            onClick={onNavigateHeaven}
+            className={`relative flex items-center gap-1.5 rounded-[3px] px-3 py-1.5 text-[0.6875rem] tracking-[0.18em] uppercase transition-all duration-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c084fc] ${
+              currentPath === 'heaven'
+                ? 'bg-[#c084fc]/10 border border-[#c084fc]/30 text-[#c084fc]'
+                : 'border border-white/[0.08] text-[#737373] hover:border-[#c084fc]/25 hover:text-[#c084fc] hover:bg-[#c084fc]/5'
+            }`}
+          >
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="currentColor">
+              <polygon points="4.5,0.5 5.7,3.2 8.6,3.4 6.5,5.3 7.1,8.1 4.5,6.6 1.9,8.1 2.5,5.3 0.4,3.4 3.3,3.2" />
+            </svg>
+            6ix&rsquo;s Heaven
+          </button>
+        )}
 
         {user && (
           <div ref={userRef} className="relative">

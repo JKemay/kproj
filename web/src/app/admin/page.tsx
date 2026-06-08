@@ -56,12 +56,17 @@ function AdminPanel() {
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
       <AppNav />
       <main className="mx-auto max-w-3xl w-full px-5 sm:px-8 py-10 space-y-14">
-        <h1
-          className="text-[2.5rem] font-normal tracking-tight"
-          style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-        >
-          Admin
-        </h1>
+        <div className="flex items-baseline justify-between">
+          <h1
+            className="text-[2.5rem] font-normal tracking-tight"
+            style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+          >
+            Admin
+          </h1>
+          <a href="/admin/seed" className="text-[10px] tracking-[0.16em] uppercase text-[#525252] hover:text-[#c084fc] transition-colors">
+            Seed archive →
+          </a>
+        </div>
         <CreateGroupForm idToken={idToken} />
         <CreateMemberForm idToken={idToken} />
         <UploadSection idToken={idToken} />

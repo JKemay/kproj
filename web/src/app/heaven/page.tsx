@@ -3,10 +3,18 @@
 import { useRouter } from 'next/navigation';
 
 import { AppNav } from '@/components/AppNav';
-import { AuthGuard } from '@/components/AuthGuard';
+import { AuthGuard, useIsAdmin } from '@/components/AuthGuard';
+import { AccessDenied } from '@/components/ui/AccessDenied';
 
 function Heaven() {
   const router = useRouter();
+  const isAdmin = useIsAdmin();
+
+  // Private room — only the owner. Other allowlisted users get denied.
+  if (!isAdmin) {
+    return <AccessDenied userEmail="" signOutHref="/signout" />;
+  }
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
       <AppNav currentPath="heaven" />
