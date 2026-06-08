@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* ─── K-pop Archive — Design Tokens ─────────────────────────────────────── */
+
+:root {
+  --ka-bg:           #0a0a0a;
+  --ka-bg-raised:    #111111;
+  --ka-bg-hover:     #181818;
+  --ka-border:       rgba(255, 255, 255, 0.07);
+  --ka-border-mid:   rgba(255, 255, 255, 0.13);
+  --ka-accent:       #c084fc;          /* violet-400 */
+  --ka-accent-dim:   rgba(192, 132, 252, 0.15);
+  --ka-text:         #f0f0f0;
+  --ka-text-muted:   #737373;
+  --ka-text-subtle:  #404040;
+
+  --ka-font-serif:   Georgia, 'Times New Roman', serif;
+}
+
+@theme inline {
+  --color-background: var(--ka-bg);
+  --color-foreground: var(--ka-text);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--ka-font-serif);
+}
+
+html,
+body {
+  background-color: var(--ka-bg);
+  color: var(--ka-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  .ka-scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .ka-scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Skeleton shimmer (used by GroupCardSkeleton / MemberCardSkeleton) */
+@keyframes ka-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.ka-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.ka-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.04) 50%, transparent 100%);
+  animation: ka-shimmer 1.6s ease-in-out infinite;
+}

@@ -1,0 +1,58 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+.env.production
+
+# AWS / infra artifacts
+.aws-sam/
+cdk.out/
+.serverless/
+
+# Lambda build artifacts (rebuilt via pnpm package:* scripts)
+*.zip
+api/dist/
+
+# tool caches
+.turbo/
+.cache/
+coverage/
+
+# editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# media — never commit binaries
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.mp4
+*.webm
+*.mov
+!web/public/**/*.svg
+!web/public/favicon.ico

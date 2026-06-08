@@ -1,0 +1,40 @@
+{
+  "name": "@kproj/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build:api": "node scripts/build.mjs src/index.ts dist/index.mjs",
+    "build:migrate": "node scripts/build.mjs src/migrate.ts dist/migrate.mjs",
+    "build:presignup": "node scripts/build.mjs src/presignup.ts dist/presignup.mjs",
+    "package:api": "pnpm build:api && cd dist && zip -r ../api.zip index.mjs && cd ..",
+    "package:migrate": "pnpm build:migrate && rm -rf dist/migrations && cp -r ../db/migrations dist/migrations && cd dist && zip -r ../migrate.zip migrate.mjs migrations && cd ..",
+    "package:presignup": "pnpm build:presignup && cd dist && zip ../presignup.zip presignup.mjs && cd ..",
+    "dev": "tsx watch src/local.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/client-secrets-manager": "^3.700.0",
+    "@aws-sdk/s3-presigned-post": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0",
+    "@hono/zod-validator": "^0.4.2",
+    "@kproj/db": "workspace:*",
+    "aws-jwt-verify": "^5.0.0",
+    "drizzle-orm": "^0.36.4",
+    "hono": "^4.6.13",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@types/aws-lambda": "^8.10.146",
+    "@types/node": "^20.17.10",
+    "@types/pg": "^8.11.10",
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

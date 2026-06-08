@@ -1,0 +1,11 @@
+packages:
+  - 'web'
+  - 'api'
+  - 'db'
+
+# pnpm 11 requires explicit approval for each native-binary postinstall script.
+# Decisions are per-package by name (covers all installed versions).
+allowBuilds:
+  esbuild: true          # needed to bundle the Lambda; native binary required
+  sharp: false           # image processing — defer until v2 image pipeline lands
+  unrs-resolver: false   # ESLint resolver native perf — JS fallback is fine
