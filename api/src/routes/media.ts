@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 
 import { zValidator } from '@hono/zod-validator';
 import { groups, media, members } from '@kproj/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { getDb } from '../db/client.js';
@@ -22,17 +22,23 @@ import type { AppEnv } from '../types.js';
 
 const route = new Hono<AppEnv>();
 
-// GET /media?groupId=X[&memberId=Y] — list media (any allowlisted user).
-// Returns rows newest-first. The caller signs s3Key → URL via /media/sign-reads.
+// GET /media?groupId=X[&memberId=Y][&groupOnly=1] — list media (allowlisted).
+// Newest-first. Caller signs s3Key → URL via /media/sign-reads.
+//   memberId=Y   → media tagged to that member
+//   groupOnly=1  → group-level media only (no member) — e.g. "Group Photos"
+//   neither      → all media in the group
 route.get('/', async (c) => {
   const groupId = c.req.query('groupId');
   const memberId = c.req.query('memberId');
+  const groupOnly = c.req.query('groupOnly') === '1';
   if (!groupId) return c.json({ error: 'groupId query param required' }, 400);
 
   const db = await getDb();
   const where = memberId
     ? and(eq(media.groupId, groupId), eq(media.memberId, memberId))
-    : eq(media.groupId, groupId);
+    : groupOnly
+      ? and(eq(media.groupId, groupId), isNull(media.memberId))
+      : eq(media.groupId, groupId);
   const rows = await db.select().from(media).where(where).orderBy(desc(media.uploadedAt));
   return c.json({ media: rows });
 });

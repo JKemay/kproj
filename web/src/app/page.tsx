@@ -11,6 +11,7 @@ import { GroupCard } from '@/components/ui/GroupCard';
 import { GroupCardSkeleton } from '@/components/ui/GroupCardSkeleton';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { apiFetch } from '@/lib/api';
+import { useSignedUrls } from '@/lib/useSignedUrls';
 
 interface Group {
   id: string;
@@ -48,6 +49,10 @@ function Dashboard() {
       cancelled = true;
     };
   }, [auth.user?.id_token]);
+
+  // Sign cover images so the cards aren't text-only.
+  const coverKeys = groups.map((g) => g.coverMediaKey).filter((k): k is string => !!k);
+  const { urls: coverUrls } = useSignedUrls(coverKeys, auth.user?.id_token ?? null);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
@@ -116,6 +121,7 @@ function Dashboard() {
                       name: g.name,
                       agency: g.agency ?? undefined,
                       debutYear: g.debutYear ?? undefined,
+                      coverUrl: g.coverMediaKey ? coverUrls[g.coverMediaKey] : undefined,
                     }}
                     onClick={() => router.push(`/groups/${g.id}`)}
                   />

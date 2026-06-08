@@ -12,9 +12,20 @@ interface MediaTileProps {
   onSetProfile: () => void;
   onDelete: () => void;
   onEditCaption: () => void;
+  /** Tooltip for the star action; defaults to profile-photo wording. */
+  starTitle?: string;
+  starActiveTitle?: string;
 }
 
-export function MediaTile({ item, isProfile, onSetProfile, onDelete, onEditCaption }: MediaTileProps) {
+export function MediaTile({
+  item,
+  isProfile,
+  onSetProfile,
+  onDelete,
+  onEditCaption,
+  starTitle = 'Set as profile photo',
+  starActiveTitle = 'Profile photo',
+}: MediaTileProps) {
   return (
     <div className="group relative block w-full overflow-hidden rounded-sm bg-[#111111] border border-white/5 break-inside-avoid mb-3">
       {item.kind === 'video' ? (
@@ -40,7 +51,7 @@ export function MediaTile({ item, isProfile, onSetProfile, onDelete, onEditCapti
       <div className="absolute top-2 right-2 flex flex-col gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
         <button
           onClick={(e) => { e.stopPropagation(); onSetProfile(); }}
-          title={isProfile ? 'Profile photo' : 'Set as profile photo'}
+          title={isProfile ? starActiveTitle : starTitle}
           className={`flex h-7 w-7 items-center justify-center rounded-[3px] border transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c084fc] ${
             isProfile
               ? 'border-[#c084fc]/50 bg-[#c084fc]/20 text-[#c084fc]'

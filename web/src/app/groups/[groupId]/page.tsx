@@ -1,16 +1,21 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
 import { AuthGuard, useIsAdmin } from '@/components/AuthGuard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EditEntityForm } from '@/components/ui/EditEntityForm';
+import { MediaMasonry } from '@/components/ui/MediaMasonry';
+import { MediaTile } from '@/components/ui/MediaTile';
 import { MemberCard } from '@/components/ui/MemberCard';
 import { MemberCardSkeleton } from '@/components/ui/MemberCardSkeleton';
 import { apiFetch } from '@/lib/api';
 import { updateGroup } from '@/lib/entities';
+import { deleteMedia, updateMediaCaption } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
 interface Group {
@@ -18,6 +23,7 @@ interface Group {
   name: string;
   agency: string | null;
   debutYear: number | null;
+  coverMediaKey: string | null;
 }
 
 interface Member {
@@ -25,6 +31,13 @@ interface Member {
   stageName: string;
   position: string | null;
   profileMediaKey: string | null;
+}
+
+interface MediaRow {
+  id: string;
+  s3Key: string;
+  kind: 'image' | 'gif' | 'video';
+  caption: string | null;
 }
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
@@ -44,9 +57,13 @@ function GroupView({ groupId }: { groupId: string }) {
 
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [groupMedia, setGroupMedia] = useState<MediaRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MediaRow | null>(null);
+  const [captionTarget, setCaptionTarget] = useState<MediaRow | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const onSaveGroup = async (values: Record<string, string>) => {
     if (!idToken || !group) return;
@@ -76,11 +93,13 @@ function GroupView({ groupId }: { groupId: string }) {
     Promise.all([
       apiFetch<{ group: Group }>(`/groups/${groupId}`, { idToken }),
       apiFetch<{ members: Member[] }>(`/groups/${groupId}/members`, { idToken }),
+      apiFetch<{ media: MediaRow[] }>(`/media?groupId=${groupId}&groupOnly=1`, { idToken }),
     ])
-      .then(([g, m]) => {
+      .then(([g, m, md]) => {
         if (cancelled) return;
         setGroup(g.group);
         setMembers(m.members);
+        setGroupMedia(md.media);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -90,8 +109,65 @@ function GroupView({ groupId }: { groupId: string }) {
     };
   }, [groupId, idToken]);
 
-  const profileKeys = members.map((m) => m.profileMediaKey).filter((k): k is string => !!k);
-  const { urls } = useSignedUrls(profileKeys, idToken);
+  // Sign member profile keys + group photo keys + the cover key in one batch.
+  const signKeys = [
+    ...members.map((m) => m.profileMediaKey).filter((k): k is string => !!k),
+    ...groupMedia.map((m) => m.s3Key),
+    ...(group?.coverMediaKey ? [group.coverMediaKey] : []),
+  ];
+  const { urls } = useSignedUrls(signKeys, idToken);
+
+  // ---- Group-photo actions ----
+  const onSetCover = async (m: MediaRow) => {
+    if (!idToken || !group) return;
+    setGroup({ ...group, coverMediaKey: m.s3Key }); // optimistic
+    try {
+      await updateGroup(groupId, { coverMediaKey: m.s3Key }, idToken);
+    } catch {
+      // reload group to revert
+      apiFetch<{ group: Group }>(`/groups/${groupId}`, { idToken })
+        .then((r) => setGroup(r.group))
+        .catch(() => {});
+    }
+  };
+
+  const onConfirmDelete = async () => {
+    if (!idToken || !deleteTarget) return;
+    setBusy(true);
+    try {
+      await deleteMedia(deleteTarget.id, idToken);
+      setGroupMedia((rows) => rows.filter((r) => r.id !== deleteTarget.id));
+      if (group?.coverMediaKey === deleteTarget.s3Key) {
+        setGroup({ ...group, coverMediaKey: null });
+      }
+      setDeleteTarget(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSaveCaption = async (values: Record<string, string>) => {
+    if (!idToken || !captionTarget) return;
+    setBusy(true);
+    const next = values.caption ?? '';
+    try {
+      await updateMediaCaption(captionTarget.id, next || null, idToken);
+      setGroupMedia((rows) =>
+        rows.map((r) => (r.id === captionTarget.id ? { ...r, caption: next || null } : r)),
+      );
+      setCaptionTarget(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const groupMasonryItems = groupMedia
+    .filter((m) => urls[m.s3Key])
+    .map((m) => ({ key: m.s3Key, signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }));
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
@@ -163,12 +239,8 @@ function GroupView({ groupId }: { groupId: string }) {
               )}
             </div>
 
-            {members.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center">
-                <p className="text-sm text-[#525252]">No members listed yet.</p>
-              </div>
-            ) : (
-              <div>
+            {members.length > 0 && (
+              <div className="mb-14">
                 <div className="flex items-center gap-4 mb-6">
                   <p className="text-[10px] tracking-[0.22em] uppercase text-[#404040] shrink-0">Members</p>
                   <div className="h-px flex-1 bg-white/[0.05]" />
@@ -189,9 +261,89 @@ function GroupView({ groupId }: { groupId: string }) {
                 </div>
               </div>
             )}
+
+            {/* Group Photos — media uploaded to the group (no member selected). */}
+            {(groupMedia.length > 0 || isAdmin) && (
+              <div>
+                <div className="flex items-center gap-4 mb-6">
+                  <p className="text-[10px] tracking-[0.22em] uppercase text-[#404040] shrink-0">
+                    Group Photos
+                  </p>
+                  <div className="h-px flex-1 bg-white/[0.05]" />
+                  {isAdmin && (
+                    <span className="text-[10px] text-[#383838] shrink-0">
+                      ★ sets the card cover
+                    </span>
+                  )}
+                </div>
+                {groupMedia.length === 0 ? (
+                  <p className="text-sm text-[#525252] py-8 text-center">
+                    No group photos yet. Upload from{' '}
+                    <Link className="underline hover:text-[#c084fc]" href="/admin">
+                      /admin
+                    </Link>{' '}
+                    without selecting a member.
+                  </p>
+                ) : isAdmin ? (
+                  <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
+                    {groupMedia
+                      .filter((m) => urls[m.s3Key])
+                      .map((m) => (
+                        <MediaTile
+                          key={m.id}
+                          item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
+                          isProfile={group.coverMediaKey === m.s3Key}
+                          starTitle="Set as group cover"
+                          starActiveTitle="Group cover"
+                          onSetProfile={() => onSetCover(m)}
+                          onDelete={() => setDeleteTarget(m)}
+                          onEditCaption={() => setCaptionTarget(m)}
+                        />
+                      ))}
+                  </div>
+                ) : (
+                  <MediaMasonry items={groupMasonryItems} />
+                )}
+              </div>
+            )}
+
+            {members.length === 0 && groupMedia.length === 0 && !isAdmin && (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <p className="text-sm text-[#525252]">Nothing here yet.</p>
+              </div>
+            )}
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete this photo?"
+        message="The file and its record will be permanently removed. This cannot be undone."
+        confirmLabel={busy ? 'Deleting…' : 'Delete'}
+        destructive
+        onConfirm={onConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {captionTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
+          onClick={() => setCaptionTarget(null)}
+        >
+          <div className="w-full max-w-sm rounded-[3px] border border-white/8 bg-[#111111] p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-normal text-[#f0f0f0] mb-4" style={{ fontFamily: 'Georgia, serif' }}>
+              Edit caption
+            </h2>
+            <EditEntityForm
+              fields={[{ name: 'caption', label: 'Caption', value: captionTarget.caption ?? '', type: 'textarea' }]}
+              onSave={onSaveCaption}
+              onCancel={() => setCaptionTarget(null)}
+              saving={busy}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

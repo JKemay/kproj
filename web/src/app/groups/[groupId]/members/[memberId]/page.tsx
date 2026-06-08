@@ -67,11 +67,10 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
     load();
   }, [load]);
 
-  const allKeys = useMemo(() => {
-    const keys = mediaRows.map((m) => m.s3Key);
-    if (member?.profileMediaKey) keys.push(member.profileMediaKey);
-    return keys;
-  }, [mediaRows, member?.profileMediaKey]);
+  const allKeys = [
+    ...mediaRows.map((m) => m.s3Key),
+    ...(member?.profileMediaKey ? [member.profileMediaKey] : []),
+  ];
   const { urls } = useSignedUrls(allKeys, idToken);
 
   const profileUrl = member?.profileMediaKey ? urls[member.profileMediaKey] : undefined;
