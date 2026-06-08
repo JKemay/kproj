@@ -3,13 +3,16 @@
 // All routes here inherit verifyJwt + requireAllowed from the parent app.
 // Mutations (POST) layer requireAdmin on top.
 
+import { randomUUID } from 'node:crypto';
+
 import { zValidator } from '@hono/zod-validator';
-import { groups, members } from '@kproj/db/schema';
+import { eras, groups, members } from '@kproj/db/schema';
 import { and, asc, count, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { getDb } from '../db/client.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
+import { createEraBody } from '../schemas/eras.js';
 import {
   createGroupBody,
   createMemberBody,
@@ -153,5 +156,39 @@ route.patch(
     return c.json({ member: row });
   },
 );
+
+// ---- Eras (group-scoped list + create) ----
+
+route.get('/:id/eras', async (c) => {
+  const groupId = c.req.param('id');
+  const db = await getDb();
+  const rows = await db
+    .select()
+    .from(eras)
+    .where(eq(eras.groupId, groupId))
+    .orderBy(asc(eras.sortOrder), asc(eras.label));
+  return c.json({ eras: rows });
+});
+
+route.post('/:id/eras', requireAdmin, zValidator('json', createEraBody), async (c) => {
+  const groupId = c.req.param('id');
+  const body = c.req.valid('json');
+  const db = await getDb();
+
+  const [parent] = await db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
+  if (!parent) return c.json({ error: 'Group not found' }, 404);
+
+  const [row] = await db
+    .insert(eras)
+    .values({
+      id: randomUUID(),
+      groupId,
+      label: body.label,
+      releaseDate: body.releaseDate ?? null,
+      sortOrder: body.sortOrder ?? 0,
+    })
+    .returning();
+  return c.json({ era: row }, 201);
+});
 
 export default route;

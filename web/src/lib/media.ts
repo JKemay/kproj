@@ -125,10 +125,21 @@ export function deleteMedia(id: string, idToken: string) {
   return apiFetch<{ ok: true }>(`/media/${id}`, { method: 'DELETE', idToken });
 }
 
-export function updateMediaCaption(id: string, caption: string | null, idToken: string) {
+export interface MediaPatch {
+  caption?: string | null;
+  eraId?: string | null;
+  tags?: string[];
+}
+
+/** General media update — caption, era assignment, and/or tags. */
+export function updateMedia(id: string, patch: MediaPatch, idToken: string) {
   return apiFetch<{ media: unknown }>(`/media/${id}`, {
     method: 'PATCH',
     idToken,
-    body: { caption },
+    body: patch,
   });
+}
+
+export function updateMediaCaption(id: string, caption: string | null, idToken: string) {
+  return updateMedia(id, { caption }, idToken);
 }

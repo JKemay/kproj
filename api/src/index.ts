@@ -16,6 +16,7 @@ import { handle } from 'hono/aws-lambda';
 import { getDb } from './db/client.js';
 import { requireAllowed } from './middleware/requireAllowed.js';
 import { verifyJwt } from './middleware/verifyJwt.js';
+import erasRoute from './routes/eras.js';
 import groupsRoute from './routes/groups.js';
 import mediaRoute from './routes/media.js';
 import type { AppEnv } from './types.js';
@@ -57,5 +58,6 @@ app.get('/stats', async (c) => {
 
 app.route('/groups', groupsRoute);
 app.route('/media', mediaRoute);
+app.route('/eras', erasRoute);
 
 export const handler = handle(app);

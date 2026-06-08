@@ -22,24 +22,30 @@ import type { AppEnv } from '../types.js';
 
 const route = new Hono<AppEnv>();
 
-// GET /media?groupId=X[&memberId=Y][&groupOnly=1] — list media (allowlisted).
+// GET /media?groupId=X[&memberId=Y][&groupOnly=1][&eraId=Z] — list media.
 // Newest-first. Caller signs s3Key → URL via /media/sign-reads.
 //   memberId=Y   → media tagged to that member
 //   groupOnly=1  → group-level media only (no member) — e.g. "Group Photos"
+//   eraId=Z      → additionally restrict to that era
 //   neither      → all media in the group
 route.get('/', async (c) => {
   const groupId = c.req.query('groupId');
   const memberId = c.req.query('memberId');
+  const eraId = c.req.query('eraId');
   const groupOnly = c.req.query('groupOnly') === '1';
   if (!groupId) return c.json({ error: 'groupId query param required' }, 400);
 
+  const conds = [eq(media.groupId, groupId)];
+  if (memberId) conds.push(eq(media.memberId, memberId));
+  else if (groupOnly) conds.push(isNull(media.memberId));
+  if (eraId) conds.push(eq(media.eraId, eraId));
+
   const db = await getDb();
-  const where = memberId
-    ? and(eq(media.groupId, groupId), eq(media.memberId, memberId))
-    : groupOnly
-      ? and(eq(media.groupId, groupId), isNull(media.memberId))
-      : eq(media.groupId, groupId);
-  const rows = await db.select().from(media).where(where).orderBy(desc(media.uploadedAt));
+  const rows = await db
+    .select()
+    .from(media)
+    .where(and(...conds))
+    .orderBy(desc(media.uploadedAt));
   return c.json({ media: rows });
 });
 
@@ -104,8 +110,10 @@ route.post('/', requireAdmin, zValidator('json', registerMediaBody), async (c) =
         s3Key: body.s3Key,
         groupId: body.groupId,
         memberId: body.memberId ?? null,
+        eraId: body.eraId ?? null,
         kind: body.kind,
         caption: body.caption,
+        tags: body.tags ?? [],
         uploadedBy: c.get('user').id,
       })
       .returning();

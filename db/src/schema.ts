@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  date,
   foreignKey,
   index,
   integer,
@@ -66,6 +67,26 @@ export const members = pgTable(
   ],
 );
 
+// Eras = album/comeback cycles, scoped to a group. Media can belong to one.
+// Defined before `media` so media's eraId FK resolves.
+export const eras = pgTable(
+  'eras',
+  {
+    id: uuid('id').primaryKey(),
+    groupId: text('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(), // e.g. "2024 · Crazy"
+    releaseDate: date('release_date'), // optional
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('eras_label_length', sql`length(${t.label}) BETWEEN 1 AND 100`),
+    index('idx_eras_group').on(t.groupId),
+  ],
+);
+
 export const mediaKind = pgEnum('media_kind', ['image', 'gif', 'video']);
 
 export const media = pgTable(
@@ -77,8 +98,10 @@ export const media = pgTable(
       .notNull()
       .references(() => groups.id, { onDelete: 'cascade' }),
     memberId: text('member_id'),
+    eraId: uuid('era_id').references(() => eras.id, { onDelete: 'set null' }),
     kind: mediaKind('kind').notNull(),
     caption: text('caption'),
+    tags: text('tags').array().notNull().default(sql`'{}'`),
     uploadedAt: timestamp('uploaded_at', { withTimezone: true }).notNull().defaultNow(),
     uploadedBy: uuid('uploaded_by').references(() => users.id),
   },
@@ -95,6 +118,7 @@ export const media = pgTable(
     check('media_caption_length', sql`${t.caption} IS NULL OR length(${t.caption}) <= 500`),
     index('idx_media_group').on(t.groupId),
     index('idx_media_member').on(t.groupId, t.memberId),
+    index('idx_media_era').on(t.eraId),
   ],
 );
 
@@ -105,5 +129,7 @@ export type Group = typeof groups.$inferSelect;
 export type NewGroup = typeof groups.$inferInsert;
 export type Member = typeof members.$inferSelect;
 export type NewMember = typeof members.$inferInsert;
+export type Era = typeof eras.$inferSelect;
+export type NewEra = typeof eras.$inferInsert;
 export type Media = typeof media.$inferSelect;
 export type NewMedia = typeof media.$inferInsert;

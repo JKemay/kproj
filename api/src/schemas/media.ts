@@ -31,18 +31,24 @@ export const signReadsBody = z.object({
 });
 export type SignReadsBody = z.infer<typeof signReadsBody>;
 
+const tagList = z.array(z.string().min(1).max(40)).max(30);
+
 export const registerMediaBody = z.object({
   s3Key: z.string().min(1).max(500),
   groupId: slug,
   memberId: slug.optional(),
+  eraId: z.string().uuid().nullable().optional(),
   kind: z.enum(['image', 'gif', 'video']),
   caption: z.string().max(500).optional(),
+  tags: tagList.optional(),
 });
 export type RegisterMediaBody = z.infer<typeof registerMediaBody>;
 
 export const updateMediaBody = z
   .object({
     caption: z.string().max(500).nullable().optional(),
+    eraId: z.string().uuid().nullable().optional(),
+    tags: tagList.optional(),
   })
   .strict();
 export type UpdateMediaBody = z.infer<typeof updateMediaBody>;
