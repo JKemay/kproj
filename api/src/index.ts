@@ -8,9 +8,12 @@
 // Add new route modules under src/routes/ and mount them after the
 // `app.use(...)` middleware lines below.
 
+import { groups, media, members } from '@kproj/db/schema';
+import { count } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { handle } from 'hono/aws-lambda';
 
+import { getDb } from './db/client.js';
 import { requireAllowed } from './middleware/requireAllowed.js';
 import { verifyJwt } from './middleware/verifyJwt.js';
 import groupsRoute from './routes/groups.js';
@@ -30,7 +33,7 @@ app.get('/health', (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 app.get('/', (c) =>
   c.json({
     name: 'kproj-api',
-    endpoints: ['/health', '/me', '/groups', '/groups/:id', '/media/sign-uploads', '/media/sign-reads'],
+    endpoints: ['/health', '/me', '/stats', '/groups', '/groups/:id', '/media/sign-uploads', '/media/sign-reads'],
   }),
 );
 
@@ -40,6 +43,18 @@ app.use('*', requireAllowed);
 
 // ---- Protected routes ----
 app.get('/me', (c) => c.json({ user: c.get('user') }));
+
+// Archive-wide counts for the dashboard hero.
+app.get('/stats', async (c) => {
+  const db = await getDb();
+  const [[g], [m], [md]] = await Promise.all([
+    db.select({ c: count() }).from(groups),
+    db.select({ c: count() }).from(members),
+    db.select({ c: count() }).from(media),
+  ]);
+  return c.json({ groups: g?.c ?? 0, members: m?.c ?? 0, media: md?.c ?? 0 });
+});
+
 app.route('/groups', groupsRoute);
 app.route('/media', mediaRoute);
 

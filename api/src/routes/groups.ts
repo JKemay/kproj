@@ -5,7 +5,7 @@
 
 import { zValidator } from '@hono/zod-validator';
 import { groups, members } from '@kproj/db/schema';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { getDb } from '../db/client.js';
@@ -22,9 +22,23 @@ const route = new Hono<AppEnv>();
 
 // ---- Groups ----
 
+// List groups, each with a memberCount (LEFT JOIN so member-less topics show 0).
 route.get('/', async (c) => {
   const db = await getDb();
-  const rows = await db.select().from(groups).orderBy(asc(groups.name));
+  const rows = await db
+    .select({
+      id: groups.id,
+      name: groups.name,
+      debutYear: groups.debutYear,
+      agency: groups.agency,
+      coverMediaKey: groups.coverMediaKey,
+      createdAt: groups.createdAt,
+      memberCount: count(members.id),
+    })
+    .from(groups)
+    .leftJoin(members, eq(members.groupId, groups.id))
+    .groupBy(groups.id)
+    .orderBy(asc(groups.name));
   return c.json({ groups: rows });
 });
 

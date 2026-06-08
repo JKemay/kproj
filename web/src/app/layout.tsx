@@ -16,8 +16,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'kproj',
-  description: 'private K-pop archive',
+  title: {
+    default: 'K-pop Archive',
+    template: '%s · K-pop Archive',
+  },
+  description: 'A private, invite-only K-pop media archive.',
+  robots: { index: false, follow: false }, // private site — keep it out of search engines
 };
 
 export default function RootLayout({

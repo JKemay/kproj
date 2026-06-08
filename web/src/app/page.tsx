@@ -19,6 +19,13 @@ interface Group {
   agency: string | null;
   debutYear: number | null;
   coverMediaKey: string | null;
+  memberCount: number;
+}
+
+interface Stats {
+  groups: number;
+  members: number;
+  media: number;
 }
 
 function Dashboard() {
@@ -27,6 +34,7 @@ function Dashboard() {
   const ownerName = ((auth.user?.profile.name as string | undefined) ?? '').split(' ')[0];
 
   const [groups, setGroups] = useState<Group[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -35,9 +43,14 @@ function Dashboard() {
     const idToken = auth.user?.id_token;
     if (!idToken) return;
     let cancelled = false;
-    apiFetch<{ groups: Group[] }>('/groups', { idToken })
-      .then((res) => {
-        if (!cancelled) setGroups(res.groups);
+    Promise.all([
+      apiFetch<{ groups: Group[] }>('/groups', { idToken }),
+      apiFetch<Stats>('/stats', { idToken }),
+    ])
+      .then(([gr, st]) => {
+        if (cancelled) return;
+        setGroups(gr.groups);
+        setStats(st);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -61,9 +74,9 @@ function Dashboard() {
       <DashboardHero
         siteTitle="K-pop Archive"
         ownerName={ownerName || undefined}
-        groupCount={groups.length}
-        memberCount={0}
-        mediaCount={0}
+        groupCount={stats?.groups ?? groups.length}
+        memberCount={stats?.members ?? 0}
+        mediaCount={stats?.media ?? 0}
       />
 
       <div className="mx-auto max-w-[1600px] px-5 sm:px-8 py-10">
@@ -122,6 +135,10 @@ function Dashboard() {
                       agency: g.agency ?? undefined,
                       debutYear: g.debutYear ?? undefined,
                       coverUrl: g.coverMediaKey ? coverUrls[g.coverMediaKey] : undefined,
+                      memberTags:
+                        g.memberCount > 0
+                          ? [`${g.memberCount} ${g.memberCount === 1 ? 'member' : 'members'}`]
+                          : [],
                     }}
                     onClick={() => router.push(`/groups/${g.id}`)}
                   />
