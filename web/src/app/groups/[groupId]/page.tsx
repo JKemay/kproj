@@ -16,6 +16,7 @@ import { MediaMasonry } from '@/components/ui/MediaMasonry';
 import { MediaTile } from '@/components/ui/MediaTile';
 import { MemberCard } from '@/components/ui/MemberCard';
 import { MemberCardSkeleton } from '@/components/ui/MemberCardSkeleton';
+import { TopicHero } from '@/components/ui/TopicHero';
 import { apiFetch } from '@/lib/api';
 import { updateGroup } from '@/lib/entities';
 import { type Era, listEras } from '@/lib/eras';
@@ -25,6 +26,7 @@ import { useSignedUrls } from '@/lib/useSignedUrls';
 interface Group {
   id: string;
   name: string;
+  kind: 'group' | 'soloist' | 'topic';
   agency: string | null;
   debutYear: number | null;
   coverMediaKey: string | null;
@@ -247,6 +249,18 @@ function GroupView({ groupId }: { groupId: string }) {
                     saving={saving}
                   />
                 </div>
+              ) : group.kind === 'topic' ? (
+                <div className="relative">
+                  <TopicHero title={group.name} mediaCount={groupMedia.length} />
+                  {isAdmin && (
+                    <button
+                      onClick={() => setEditing(true)}
+                      className="absolute top-0 right-0 text-[10px] tracking-[0.16em] uppercase text-[#525252] hover:text-[#c084fc] transition-colors"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
               ) : (
                 <>
                   <div className="flex items-start justify-between gap-4">
@@ -302,7 +316,7 @@ function GroupView({ groupId }: { groupId: string }) {
               <div>
                 <div className="flex items-center gap-4 mb-6">
                   <p className="text-[10px] tracking-[0.22em] uppercase text-[#404040] shrink-0">
-                    Group Photos
+                    {group.kind === 'topic' ? 'Collection' : 'Group Photos'}
                   </p>
                   <div className="h-px flex-1 bg-white/[0.05]" />
                   {isAdmin && (

@@ -32,6 +32,7 @@ route.get('/', async (c) => {
     .select({
       id: groups.id,
       name: groups.name,
+      kind: groups.kind,
       debutYear: groups.debutYear,
       agency: groups.agency,
       coverMediaKey: groups.coverMediaKey,

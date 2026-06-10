@@ -92,6 +92,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function CreateGroupForm({ idToken }: { idToken: string | null }) {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
+  const [kind, setKind] = useState('group');
   const [debutYear, setDebutYear] = useState('');
   const [agency, setAgency] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -104,10 +105,16 @@ function CreateGroupForm({ idToken }: { idToken: string | null }) {
       await apiFetch('/groups', {
         method: 'POST',
         idToken,
-        body: { id, name, debutYear: debutYear ? Number(debutYear) : undefined, agency: agency || undefined },
+        body: {
+          id,
+          name,
+          kind: kind !== 'group' ? kind : undefined,
+          debutYear: debutYear ? Number(debutYear) : undefined,
+          agency: agency || undefined,
+        },
       });
       setStatus({ kind: 'ok', message: 'Group created.' });
-      setId(''); setName(''); setDebutYear(''); setAgency('');
+      setId(''); setName(''); setKind('group'); setDebutYear(''); setAgency('');
     } catch (e) {
       setStatus({ kind: 'err', message: e instanceof Error ? e.message : String(e) });
     }
@@ -119,6 +126,11 @@ function CreateGroupForm({ idToken }: { idToken: string | null }) {
       <form onSubmit={onSubmit} className="max-w-xl space-y-3">
         <Field label="Slug (id)" value={id} onChange={setId} placeholder="lesserafim" required />
         <Field label="Name" value={name} onChange={setName} placeholder="LE SSERAFIM" required />
+        <SelectField label="Type" value={kind} onChange={setKind}>
+          <option value="group">Group</option>
+          <option value="soloist">Soloist</option>
+          <option value="topic">Topic (collection, no members)</option>
+        </SelectField>
         <Field label="Debut Year" value={debutYear} onChange={setDebutYear} placeholder="2022" type="number" />
         <Field label="Agency" value={agency} onChange={setAgency} placeholder="Source Music (HYBE)" />
         <SubmitBtn status={status}>Create group</SubmitBtn>

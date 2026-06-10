@@ -26,11 +26,16 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Kind distinguishes idol groups, soloists (groups of 1), and topics —
+// themed collections with no members (e.g. NL, Futa).
+export const groupKind = pgEnum('group_kind', ['group', 'soloist', 'topic']);
+
 export const groups = pgTable(
   'groups',
   {
     id: text('id').primaryKey(), // slug, e.g. 'lesserafim'
     name: text('name').notNull(),
+    kind: groupKind('kind').notNull().default('group'),
     debutYear: integer('debut_year'),
     agency: text('agency'),
     coverMediaKey: text('cover_media_key'),

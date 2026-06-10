@@ -13,6 +13,7 @@ const slug = z
 export const createGroupBody = z.object({
   id: slug,
   name: z.string().min(1).max(100),
+  kind: z.enum(['group', 'soloist', 'topic']).optional(),
   debutYear: z.number().int().min(1990).max(2100).optional(),
   agency: z.string().max(100).optional(),
 });
@@ -34,6 +35,7 @@ export type CreateMemberBody = z.infer<typeof createMemberBody>;
 export const updateGroupBody = z
   .object({
     name: z.string().min(1).max(100).optional(),
+    kind: z.enum(['group', 'soloist', 'topic']).optional(),
     debutYear: z.number().int().min(1990).max(2100).nullable().optional(),
     agency: z.string().max(100).nullable().optional(),
     coverMediaKey: z.string().max(500).nullable().optional(),

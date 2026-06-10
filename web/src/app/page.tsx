@@ -17,10 +17,19 @@ import { useSignedUrls } from '@/lib/useSignedUrls';
 interface Group {
   id: string;
   name: string;
+  kind: 'group' | 'soloist' | 'topic';
   agency: string | null;
   debutYear: number | null;
   coverMediaKey: string | null;
   memberCount: number;
+}
+
+function cardTag(g: Group): string[] {
+  if (g.kind === 'topic') return ['Topic'];
+  if (g.kind === 'soloist') return ['Soloist'];
+  return g.memberCount > 0
+    ? [`${g.memberCount} ${g.memberCount === 1 ? 'member' : 'members'}`]
+    : [];
 }
 
 interface Stats {
@@ -180,10 +189,7 @@ function Dashboard() {
                       agency: g.agency ?? undefined,
                       debutYear: g.debutYear ?? undefined,
                       coverUrl: g.coverMediaKey ? coverUrls[g.coverMediaKey] : undefined,
-                      memberTags:
-                        g.memberCount > 0
-                          ? [`${g.memberCount} ${g.memberCount === 1 ? 'member' : 'members'}`]
-                          : [],
+                      memberTags: cardTag(g),
                     }}
                     onClick={() => router.push(`/groups/${g.id}`)}
                   />
