@@ -6,13 +6,17 @@ import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
 import { AuthGuard, useIsAdmin } from '@/components/AuthGuard';
+import { MediaEditModal } from '@/components/MediaEditModal';
+import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EditEntityForm } from '@/components/ui/EditEntityForm';
+import { EraTabs } from '@/components/ui/EraTabs';
 import { MediaMasonry } from '@/components/ui/MediaMasonry';
 import { MediaTile } from '@/components/ui/MediaTile';
 import { apiFetch } from '@/lib/api';
 import { updateMember } from '@/lib/entities';
-import { deleteMedia, updateMediaCaption } from '@/lib/media';
+import { type Era, listEras } from '@/lib/eras';
+import { type MediaPatch, deleteMedia, updateMedia } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
 interface Member {
@@ -29,6 +33,8 @@ interface MediaRow {
   s3Key: string;
   kind: 'image' | 'gif' | 'video';
   caption: string | null;
+  eraId: string | null;
+  tags: string[];
 }
 
 function MemberView({ groupId, memberId }: { groupId: string; memberId: string }) {
@@ -39,6 +45,8 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
 
   const [member, setMember] = useState<Member | null>(null);
   const [mediaRows, setMediaRows] = useState<MediaRow[]>([]);
+  const [eras, setEras] = useState<Era[]>([]);
+  const [activeEraId, setActiveEraId] = useState('all');
   const [error, setError] = useState<string | null>(null);
 
   // Modal state
@@ -46,6 +54,7 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
   const [captionTarget, setCaptionTarget] = useState<MediaRow | null>(null);
   const [editingMember, setEditingMember] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   const load = useMemo(
     () => () => {
@@ -53,10 +62,12 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
       Promise.all([
         apiFetch<{ member: Member }>(`/groups/${groupId}/members/${memberId}`, { idToken }),
         apiFetch<{ media: MediaRow[] }>(`/media?groupId=${groupId}&memberId=${memberId}`, { idToken }),
+        listEras(groupId, idToken),
       ])
-        .then(([m, md]) => {
+        .then(([m, md, er]) => {
           setMember(m.member);
           setMediaRows(md.media);
+          setEras(er.eras);
         })
         .catch((e) => setError(e instanceof Error ? e.message : String(e)));
     },
@@ -96,25 +107,35 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
         setMember({ ...member, profileMediaKey: null });
       }
       setDeleteTarget(null);
+      setBanner({ message: 'Photo deleted', variant: 'success' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
     } finally {
       setBusy(false);
     }
   };
 
-  const onSaveCaption = async (values: Record<string, string>) => {
+  const onSaveMedia = async (patch: MediaPatch) => {
     if (!idToken || !captionTarget) return;
     setBusy(true);
-    const next = values.caption ?? '';
     try {
-      await updateMediaCaption(captionTarget.id, next || null, idToken);
+      await updateMedia(captionTarget.id, patch, idToken);
       setMediaRows((rows) =>
-        rows.map((r) => (r.id === captionTarget.id ? { ...r, caption: next || null } : r)),
+        rows.map((r) =>
+          r.id === captionTarget.id
+            ? {
+                ...r,
+                caption: patch.caption ?? null,
+                tags: patch.tags ?? r.tags,
+                eraId: patch.eraId !== undefined ? patch.eraId : r.eraId,
+              }
+            : r,
+        ),
       );
       setCaptionTarget(null);
+      setBanner({ message: 'Saved', variant: 'success' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
     } finally {
       setBusy(false);
     }
@@ -145,7 +166,22 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
     }
   };
 
-  const masonryItems = mediaRows
+  // ---- Era filter ----
+  // Tabs: "All" + only the eras that actually have media on this page.
+  const eraCounts = new Map<string, number>();
+  for (const m of mediaRows) {
+    if (m.eraId) eraCounts.set(m.eraId, (eraCounts.get(m.eraId) ?? 0) + 1);
+  }
+  const eraTabs = [
+    { id: 'all', label: 'All', count: mediaRows.length },
+    ...eras
+      .filter((er) => eraCounts.has(er.id))
+      .map((er) => ({ id: er.id, label: er.label, count: eraCounts.get(er.id)! })),
+  ];
+  const visibleRows =
+    activeEraId === 'all' ? mediaRows : mediaRows.filter((m) => m.eraId === activeEraId);
+
+  const masonryItems = visibleRows
     .filter((m) => urls[m.s3Key])
     .map((m) => ({
       key: m.s3Key,
@@ -228,19 +264,25 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
               </div>
             </div>
 
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex items-center gap-4 mb-4">
               <p className="text-[10px] tracking-[0.22em] uppercase text-[#404040] shrink-0">
-                {mediaRows.length} {mediaRows.length === 1 ? 'Item' : 'Items'}
+                {visibleRows.length} {visibleRows.length === 1 ? 'Item' : 'Items'}
               </p>
               <div className="h-px flex-1 bg-white/[0.05]" />
             </div>
 
+            {eraTabs.length > 1 && (
+              <div className="mb-6">
+                <EraTabs eras={eraTabs} activeId={activeEraId} onSelect={setActiveEraId} />
+              </div>
+            )}
+
             {isAdmin ? (
-              mediaRows.length === 0 ? (
+              visibleRows.length === 0 ? (
                 <p className="text-sm text-[#525252] py-12 text-center">No media yet.</p>
               ) : (
                 <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-                  {mediaRows
+                  {visibleRows
                     .filter((m) => urls[m.s3Key])
                     .map((m) => (
                       <MediaTile
@@ -272,44 +314,26 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
       />
 
       {captionTarget && (
-        <CaptionModal
-          initial={captionTarget.caption ?? ''}
+        <MediaEditModal
+          initial={{
+            caption: captionTarget.caption,
+            tags: captionTarget.tags ?? [],
+            eraId: captionTarget.eraId,
+          }}
+          eras={eras}
           saving={busy}
-          onSave={onSaveCaption}
+          onSave={onSaveMedia}
           onCancel={() => setCaptionTarget(null)}
         />
       )}
-    </div>
-  );
-}
 
-function CaptionModal({
-  initial,
-  saving,
-  onSave,
-  onCancel,
-}: {
-  initial: string;
-  saving: boolean;
-  onSave: (values: Record<string, string>) => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
-      onClick={onCancel}
-    >
-      <div className="w-full max-w-sm rounded-[3px] border border-white/8 bg-[#111111] p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-base font-normal text-[#f0f0f0] mb-4" style={{ fontFamily: "Georgia, serif" }}>
-          Edit caption
-        </h2>
-        <EditEntityForm
-          fields={[{ name: 'caption', label: 'Caption', value: initial, type: 'textarea' }]}
-          onSave={onSave}
-          onCancel={onCancel}
-          saving={saving}
+      {banner && (
+        <ConfirmBanner
+          message={banner.message}
+          variant={banner.variant}
+          onDismiss={() => setBanner(null)}
         />
-      </div>
+      )}
     </div>
   );
 }

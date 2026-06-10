@@ -9,6 +9,7 @@ import { AuthGuard } from '@/components/AuthGuard';
 import { DashboardHero } from '@/components/ui/DashboardHero';
 import { GroupCard } from '@/components/ui/GroupCard';
 import { GroupCardSkeleton } from '@/components/ui/GroupCardSkeleton';
+import { RecentStrip } from '@/components/ui/RecentStrip';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { apiFetch } from '@/lib/api';
 import { useSignedUrls } from '@/lib/useSignedUrls';
@@ -28,6 +29,15 @@ interface Stats {
   media: number;
 }
 
+interface RecentRow {
+  id: string;
+  s3Key: string;
+  groupId: string;
+  memberId: string | null;
+  kind: 'image' | 'gif' | 'video';
+  caption: string | null;
+}
+
 function Dashboard() {
   const router = useRouter();
   const auth = useAuth();
@@ -35,6 +45,7 @@ function Dashboard() {
 
   const [groups, setGroups] = useState<Group[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [recent, setRecent] = useState<RecentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -46,11 +57,13 @@ function Dashboard() {
     Promise.all([
       apiFetch<{ groups: Group[] }>('/groups', { idToken }),
       apiFetch<Stats>('/stats', { idToken }),
+      apiFetch<{ media: RecentRow[] }>('/media/recent?limit=14', { idToken }),
     ])
-      .then(([gr, st]) => {
+      .then(([gr, st, rc]) => {
         if (cancelled) return;
         setGroups(gr.groups);
         setStats(st);
+        setRecent(rc.media);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -63,9 +76,29 @@ function Dashboard() {
     };
   }, [auth.user?.id_token]);
 
-  // Sign cover images so the cards aren't text-only.
-  const coverKeys = groups.map((g) => g.coverMediaKey).filter((k): k is string => !!k);
-  const { urls: coverUrls } = useSignedUrls(coverKeys, auth.user?.id_token ?? null);
+  // Sign cover images + recent thumbnails in one batch.
+  const signKeys = [
+    ...groups.map((g) => g.coverMediaKey).filter((k): k is string => !!k),
+    ...recent.map((r) => r.s3Key),
+  ];
+  const { urls: coverUrls } = useSignedUrls(signKeys, auth.user?.id_token ?? null);
+
+  const recentItems = recent
+    .filter((r) => coverUrls[r.s3Key])
+    .map((r) => ({
+      id: r.id,
+      signedUrl: coverUrls[r.s3Key]!,
+      kind: r.kind,
+      label: r.caption ?? undefined,
+    }));
+
+  const onRecentClick = (id: string) => {
+    const row = recent.find((r) => r.id === id);
+    if (!row) return;
+    router.push(
+      row.memberId ? `/groups/${row.groupId}/members/${row.memberId}` : `/groups/${row.groupId}`,
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
@@ -80,6 +113,18 @@ function Dashboard() {
       />
 
       <div className="mx-auto max-w-[1600px] px-5 sm:px-8 py-10">
+        {recentItems.length > 0 && (
+          <div className="mb-12">
+            <div className="flex items-center gap-4 mb-4">
+              <p className="text-[10px] tracking-[0.22em] uppercase text-[#404040] shrink-0">
+                Recently added
+              </p>
+              <div className="h-px flex-1 bg-white/[0.05]" />
+            </div>
+            <RecentStrip items={recentItems} onItemClick={onRecentClick} />
+          </div>
+        )}
+
         <div className="flex items-center gap-4 mb-6">
           <p className="text-[10px] tracking-[0.22em] uppercase text-[#404040] shrink-0">
             {groups.length} {groups.length === 1 ? 'Group' : 'Groups'}

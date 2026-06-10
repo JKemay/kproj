@@ -5,8 +5,11 @@ import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
 import { AuthGuard, useAppUser } from '@/components/AuthGuard';
-import { UploadFormShell } from '@/components/ui/UploadFormShell';
+import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
+import { ImageDropGrid } from '@/components/ui/ImageDropGrid';
+import { TagInput } from '@/components/ui/TagInput';
 import { apiFetch } from '@/lib/api';
+import { type Era, createEra, listEras } from '@/lib/eras';
 import { type AllowedMime, registerMedia, uploadFiles } from '@/lib/media';
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase().trim();
@@ -175,41 +178,77 @@ function CreateMemberForm({ idToken }: { idToken: string | null }) {
   );
 }
 
+// Common tags offered as suggestions in the TagInput. Purely a convenience —
+// any free-form tag can still be typed.
+const TAG_SUGGESTIONS = ['selca', 'fancam', 'airport', 'stage', 'photoshoot', 'behind', 'mv', 'concert'];
+
 function UploadSection({ idToken }: { idToken: string | null }) {
   const [groups, setGroups] = useState<Group[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [status, setStatus] = useState<Status>({ kind: 'idle' });
-  const [resetToken, setResetToken] = useState(0);
+  const [eras, setEras] = useState<Era[]>([]);
+
+  const [files, setFiles] = useState<File[]>([]);
+  const [groupId, setGroupId] = useState('');
+  const [memberId, setMemberId] = useState('');
+  const [eraId, setEraId] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [caption, setCaption] = useState('');
+
+  // Inline "new era" mini-form
+  const [newEraOpen, setNewEraOpen] = useState(false);
+  const [newEraLabel, setNewEraLabel] = useState('');
+
+  const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     if (!idToken) return;
     apiFetch<{ groups: Group[] }>('/groups', { idToken }).then((r) => setGroups(r.groups)).catch(() => {});
   }, [idToken]);
 
-  const loadMembers = (groupId: string) => {
-    if (!idToken || !groupId) { setMembers([]); return; }
-    apiFetch<{ members: Member[] }>(`/groups/${groupId}/members`, { idToken })
+  const onGroupChange = (id: string) => {
+    setGroupId(id);
+    setMemberId('');
+    setEraId('');
+    setNewEraOpen(false);
+    if (!idToken || !id) {
+      setMembers([]);
+      setEras([]);
+      return;
+    }
+    apiFetch<{ members: Member[] }>(`/groups/${id}/members`, { idToken })
       .then((r) => setMembers(r.members))
       .catch(() => setMembers([]));
+    listEras(id, idToken)
+      .then((r) => setEras(r.eras))
+      .catch(() => setEras([]));
   };
 
-  const handleUpload = async (
-    files: File[],
-    groupId: string,
-    memberId: string,
-    caption: string,
-  ) => {
-    if (!idToken) return;
+  const onCreateEra = async () => {
+    if (!idToken || !groupId || !newEraLabel.trim()) return;
+    try {
+      const res = await createEra(groupId, { label: newEraLabel.trim() }, idToken);
+      setEras((prev) => [...prev, res.era]);
+      setEraId(res.era.id);
+      setNewEraLabel('');
+      setNewEraOpen(false);
+    } catch (e) {
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
+    }
+  };
 
-    // Filter to allowed image types (v1: no video transcoding pipeline yet).
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!idToken || !groupId || files.length === 0 || busy) return;
+
     const valid = files.filter((f) => ALLOWED.includes(f.type as AllowedMime));
     const rejected = files.length - valid.length;
     if (valid.length === 0) {
-      setStatus({ kind: 'err', message: 'No supported files. v1 accepts JPEG, PNG, WebP, GIF.' });
+      setBanner({ message: 'No supported files — JPEG, PNG, WebP, GIF, or AVIF only.', variant: 'error' });
       return;
     }
 
-    setStatus({ kind: 'busy' });
+    setBusy(true);
     try {
       const specs = valid.map((file) => ({
         clientRef: crypto.randomUUID(),
@@ -220,7 +259,6 @@ function UploadSection({ idToken }: { idToken: string | null }) {
       }));
       const keys = await uploadFiles(specs, idToken);
 
-      // Register each uploaded blob in the DB.
       await Promise.all(
         specs.map((spec) => {
           const s3Key = keys[spec.clientRef];
@@ -230,35 +268,127 @@ function UploadSection({ idToken }: { idToken: string | null }) {
               s3Key,
               groupId,
               memberId: memberId || undefined,
+              eraId: eraId || undefined,
               kind: spec.contentType === 'image/gif' ? 'gif' : 'image',
               caption: caption || undefined,
+              tags: tags.length > 0 ? tags : undefined,
             },
             idToken,
           );
         }),
       );
 
-      const msg =
-        `Uploaded ${valid.length} file${valid.length > 1 ? 's' : ''}.` +
-        (rejected > 0 ? ` Skipped ${rejected} unsupported.` : '');
-      setStatus({ kind: 'ok', message: msg });
-      setResetToken((t) => t + 1);
+      setBanner({
+        message:
+          `Uploaded ${valid.length} file${valid.length > 1 ? 's' : ''}` +
+          (rejected > 0 ? ` · skipped ${rejected} unsupported` : ''),
+        variant: 'success',
+      });
+      setFiles([]);
+      setCaption('');
+      setTags([]);
     } catch (e) {
-      setStatus({ kind: 'err', message: e instanceof Error ? e.message : String(e) });
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
     <section>
       <SectionLabel>Upload Media</SectionLabel>
-      <UploadFormShell
-        groups={groups}
-        members={members.map((m) => ({ id: m.id, name: m.stageName }))}
-        onGroupChange={loadMembers}
-        onUpload={handleUpload}
-        status={status}
-        resetToken={resetToken}
-      />
+      <form onSubmit={onSubmit} className="max-w-xl space-y-4">
+        <ImageDropGrid files={files} onFilesChange={setFiles} maxPreview={20} />
+
+        <div className="grid grid-cols-2 gap-3">
+          <SelectField label="Group *" value={groupId} onChange={onGroupChange} required>
+            <option value="">Select group</option>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </SelectField>
+          <SelectField label="Member" value={memberId} onChange={setMemberId}>
+            <option value="">— group photo —</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>{m.stageName}</option>
+            ))}
+          </SelectField>
+        </div>
+
+        <div>
+          <div className="flex items-baseline justify-between mb-1.5">
+            <label className="text-[11px] tracking-[0.12em] uppercase text-[#737373]">Era</label>
+            {groupId && (
+              <button
+                type="button"
+                onClick={() => setNewEraOpen((v) => !v)}
+                className="text-[10px] text-[#525252] hover:text-[#c084fc] transition-colors"
+              >
+                {newEraOpen ? 'cancel' : '+ new era'}
+              </button>
+            )}
+          </div>
+          {newEraOpen ? (
+            <div className="flex gap-2">
+              <input
+                value={newEraLabel}
+                onChange={(e) => setNewEraLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); void onCreateEra(); }
+                }}
+                placeholder="2024 · Crazy"
+                className={fieldClass}
+              />
+              <button
+                type="button"
+                onClick={() => void onCreateEra()}
+                disabled={!newEraLabel.trim()}
+                className="shrink-0 rounded-sm bg-[#c084fc] px-4 text-sm font-medium text-black hover:bg-[#a855f7] disabled:opacity-30 transition-all"
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <select
+              value={eraId}
+              onChange={(e) => setEraId(e.target.value)}
+              className={`${fieldClass} appearance-none cursor-pointer`}
+            >
+              <option value="">— no era —</option>
+              {eras.map((er) => (
+                <option key={er.id} value={er.id}>{er.label}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-[11px] tracking-[0.12em] uppercase text-[#737373] mb-1.5">Tags</label>
+          <TagInput tags={tags} onChange={setTags} suggestions={TAG_SUGGESTIONS} />
+        </div>
+
+        <TextAreaField label="Caption (applies to all files)" value={caption} onChange={setCaption} />
+
+        <button
+          type="submit"
+          disabled={busy || !groupId || files.length === 0}
+          className="rounded-sm bg-[#c084fc] px-5 py-2.5 text-sm font-medium text-black hover:bg-[#a855f7] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          {busy
+            ? 'Uploading…'
+            : files.length > 0
+              ? `Upload ${files.length} file${files.length > 1 ? 's' : ''}`
+              : 'Upload'}
+        </button>
+      </form>
+
+      {banner && (
+        <ConfirmBanner
+          message={banner.message}
+          variant={banner.variant}
+          onDismiss={() => setBanner(null)}
+        />
+      )}
     </section>
   );
 }

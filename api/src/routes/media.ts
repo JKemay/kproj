@@ -22,6 +22,16 @@ import type { AppEnv } from '../types.js';
 
 const route = new Hono<AppEnv>();
 
+// GET /media/recent?limit=N — newest media across the whole archive (allowlisted).
+// Used by the dashboard's "recently added" strip.
+route.get('/recent', async (c) => {
+  const limitRaw = Number.parseInt(c.req.query('limit') ?? '20', 10);
+  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 20, 1), 50);
+  const db = await getDb();
+  const rows = await db.select().from(media).orderBy(desc(media.uploadedAt)).limit(limit);
+  return c.json({ media: rows });
+});
+
 // GET /media?groupId=X[&memberId=Y][&groupOnly=1][&eraId=Z] — list media.
 // Newest-first. Caller signs s3Key → URL via /media/sign-reads.
 //   memberId=Y   → media tagged to that member

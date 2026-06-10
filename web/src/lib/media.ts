@@ -35,8 +35,10 @@ interface RegisterMediaBody {
   s3Key: string;
   groupId: string;
   memberId?: string;
+  eraId?: string | null;
   kind: 'image' | 'gif' | 'video';
   caption?: string;
+  tags?: string[];
 }
 
 // ----- Sign + upload (admin only on the server) -----

@@ -7,15 +7,19 @@ import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
 import { AuthGuard, useIsAdmin } from '@/components/AuthGuard';
+import { MediaEditModal } from '@/components/MediaEditModal';
+import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EditEntityForm } from '@/components/ui/EditEntityForm';
+import { EraTabs } from '@/components/ui/EraTabs';
 import { MediaMasonry } from '@/components/ui/MediaMasonry';
 import { MediaTile } from '@/components/ui/MediaTile';
 import { MemberCard } from '@/components/ui/MemberCard';
 import { MemberCardSkeleton } from '@/components/ui/MemberCardSkeleton';
 import { apiFetch } from '@/lib/api';
 import { updateGroup } from '@/lib/entities';
-import { deleteMedia, updateMediaCaption } from '@/lib/media';
+import { type Era, listEras } from '@/lib/eras';
+import { type MediaPatch, deleteMedia, updateMedia } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
 interface Group {
@@ -38,6 +42,8 @@ interface MediaRow {
   s3Key: string;
   kind: 'image' | 'gif' | 'video';
   caption: string | null;
+  eraId: string | null;
+  tags: string[];
 }
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
@@ -58,12 +64,15 @@ function GroupView({ groupId }: { groupId: string }) {
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [groupMedia, setGroupMedia] = useState<MediaRow[]>([]);
+  const [eras, setEras] = useState<Era[]>([]);
+  const [activeEraId, setActiveEraId] = useState('all');
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MediaRow | null>(null);
   const [captionTarget, setCaptionTarget] = useState<MediaRow | null>(null);
   const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
   const onSaveGroup = async (values: Record<string, string>) => {
     if (!idToken || !group) return;
@@ -94,12 +103,14 @@ function GroupView({ groupId }: { groupId: string }) {
       apiFetch<{ group: Group }>(`/groups/${groupId}`, { idToken }),
       apiFetch<{ members: Member[] }>(`/groups/${groupId}/members`, { idToken }),
       apiFetch<{ media: MediaRow[] }>(`/media?groupId=${groupId}&groupOnly=1`, { idToken }),
+      listEras(groupId, idToken),
     ])
-      .then(([g, m, md]) => {
+      .then(([g, m, md, er]) => {
         if (cancelled) return;
         setGroup(g.group);
         setMembers(m.members);
         setGroupMedia(md.media);
+        setEras(er.eras);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -141,31 +152,55 @@ function GroupView({ groupId }: { groupId: string }) {
         setGroup({ ...group, coverMediaKey: null });
       }
       setDeleteTarget(null);
+      setBanner({ message: 'Photo deleted', variant: 'success' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
     } finally {
       setBusy(false);
     }
   };
 
-  const onSaveCaption = async (values: Record<string, string>) => {
+  const onSaveMedia = async (patch: MediaPatch) => {
     if (!idToken || !captionTarget) return;
     setBusy(true);
-    const next = values.caption ?? '';
     try {
-      await updateMediaCaption(captionTarget.id, next || null, idToken);
+      await updateMedia(captionTarget.id, patch, idToken);
       setGroupMedia((rows) =>
-        rows.map((r) => (r.id === captionTarget.id ? { ...r, caption: next || null } : r)),
+        rows.map((r) =>
+          r.id === captionTarget.id
+            ? {
+                ...r,
+                caption: patch.caption ?? null,
+                tags: patch.tags ?? r.tags,
+                eraId: patch.eraId !== undefined ? patch.eraId : r.eraId,
+              }
+            : r,
+        ),
       );
       setCaptionTarget(null);
+      setBanner({ message: 'Saved', variant: 'success' });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
     } finally {
       setBusy(false);
     }
   };
 
-  const groupMasonryItems = groupMedia
+  // ---- Era filter for Group Photos ----
+  const eraCounts = new Map<string, number>();
+  for (const m of groupMedia) {
+    if (m.eraId) eraCounts.set(m.eraId, (eraCounts.get(m.eraId) ?? 0) + 1);
+  }
+  const eraTabs = [
+    { id: 'all', label: 'All', count: groupMedia.length },
+    ...eras
+      .filter((er) => eraCounts.has(er.id))
+      .map((er) => ({ id: er.id, label: er.label, count: eraCounts.get(er.id)! })),
+  ];
+  const visibleMedia =
+    activeEraId === 'all' ? groupMedia : groupMedia.filter((m) => m.eraId === activeEraId);
+
+  const groupMasonryItems = visibleMedia
     .filter((m) => urls[m.s3Key])
     .map((m) => ({ key: m.s3Key, signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }));
 
@@ -276,6 +311,11 @@ function GroupView({ groupId }: { groupId: string }) {
                     </span>
                   )}
                 </div>
+                {eraTabs.length > 1 && groupMedia.length > 0 && (
+                  <div className="mb-6">
+                    <EraTabs eras={eraTabs} activeId={activeEraId} onSelect={setActiveEraId} />
+                  </div>
+                )}
                 {groupMedia.length === 0 ? (
                   <p className="text-sm text-[#525252] py-8 text-center">
                     No group photos yet. Upload from{' '}
@@ -286,7 +326,7 @@ function GroupView({ groupId }: { groupId: string }) {
                   </p>
                 ) : isAdmin ? (
                   <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-                    {groupMedia
+                    {visibleMedia
                       .filter((m) => urls[m.s3Key])
                       .map((m) => (
                         <MediaTile
@@ -327,22 +367,25 @@ function GroupView({ groupId }: { groupId: string }) {
       />
 
       {captionTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
-          onClick={() => setCaptionTarget(null)}
-        >
-          <div className="w-full max-w-sm rounded-[3px] border border-white/8 bg-[#111111] p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-normal text-[#f0f0f0] mb-4" style={{ fontFamily: 'Georgia, serif' }}>
-              Edit caption
-            </h2>
-            <EditEntityForm
-              fields={[{ name: 'caption', label: 'Caption', value: captionTarget.caption ?? '', type: 'textarea' }]}
-              onSave={onSaveCaption}
-              onCancel={() => setCaptionTarget(null)}
-              saving={busy}
-            />
-          </div>
-        </div>
+        <MediaEditModal
+          initial={{
+            caption: captionTarget.caption,
+            tags: captionTarget.tags ?? [],
+            eraId: captionTarget.eraId,
+          }}
+          eras={eras}
+          saving={busy}
+          onSave={onSaveMedia}
+          onCancel={() => setCaptionTarget(null)}
+        />
+      )}
+
+      {banner && (
+        <ConfirmBanner
+          message={banner.message}
+          variant={banner.variant}
+          onDismiss={() => setBanner(null)}
+        />
       )}
     </div>
   );
