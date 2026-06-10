@@ -16,6 +16,7 @@ export interface SeedMember {
 export interface SeedGroup {
   id: string;
   name: string;
+  kind?: 'group' | 'soloist' | 'topic';
   debutYear?: number;
   agency?: string;
   members: SeedMember[];
@@ -222,10 +223,10 @@ export const seedGroups: SeedGroup[] = [
   },
 
   // Soloists — groups of 1.
-  { id: 'somi', name: 'Somi', agency: 'The Black Label', members: [{ id: 'somi', stageName: 'Somi' }] },
-  { id: 'yena', name: 'Yena', members: [{ id: 'yena', stageName: 'Yena' }] },
+  { id: 'somi', name: 'Somi', kind: 'soloist', agency: 'The Black Label', members: [{ id: 'somi', stageName: 'Somi' }] },
+  { id: 'yena', name: 'Yena', kind: 'soloist', members: [{ id: 'yena', stageName: 'Yena' }] },
 
   // Topics — member-less collections (media attaches at group level).
-  { id: 'nl', name: 'NL', members: [] },
-  { id: 'futa', name: 'Futa', members: [] },
+  { id: 'nl', name: 'NL', kind: 'topic', members: [] },
+  { id: 'futa', name: 'Futa', kind: 'topic', members: [] },
 ];

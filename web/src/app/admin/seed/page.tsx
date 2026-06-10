@@ -49,7 +49,7 @@ function SeedPanel() {
         await apiFetch('/groups', {
           method: 'POST',
           idToken,
-          body: { id: g.id, name: g.name, debutYear: g.debutYear, agency: g.agency },
+          body: { id: g.id, name: g.name, kind: g.kind, debutYear: g.debutYear, agency: g.agency },
         });
         push({ text: `✓ group ${g.name}`, kind: 'ok' });
         created++;
