@@ -234,6 +234,32 @@ The migration Lambda (`kproj-migrate`) was created in subnet A earlier and
 worked only because Secrets Manager had an ENI there; it does not call Cognito
 so it was unaffected. If re-run, prefer moving it to subnet B for consistency.
 
+### Validation Lambda (created 2026-06-10)
+
+| Field | Value |
+|---|---|
+| Function | `kproj-validate` |
+| Trigger | S3 `s3:ObjectCreated:*` on `kproj-media-007235366262` (bucket notification `kproj-validate-on-create`) |
+| Runtime | Node 20, arm64, 256 MB, 30s timeout |
+| Role | `kproj-lambda-role` (shared) |
+| VPC | subnet B only (`subnet-0f7e07896ec3b41fa`), sg-lambda |
+| Env | `RDS_SECRET_ARN`, `DB_HOST`, `DB_PORT=5432`, `DB_NAME=kproj` |
+
+Behavior: ranged GET (`bytes=0-31`) on every new object, magic-byte check
+against the key's extension (jpg/png/webp/gif/avif). Mismatch or unknown
+extension → deletes the object AND any `media` row with that `s3_key`.
+Closes the "MIME validation is label-only" gap: a renamed `.exe` uploaded
+with `Content-Type: image/png` is now removed seconds after upload.
+
+Source: `api/src/validate.ts`. Redeploy: `pnpm --filter @kproj/api package:validate`
+then `aws lambda update-function-code --function-name kproj-validate --zip-file fileb://api/validate.zip`.
+
+NOTE for the future image-optimization pipeline: its Lambda will also fire
+this validator on every derivative it writes (thumbnails etc.). Generated
+WebP files will pass the check, but if the pipeline writes any non-image
+artifacts (e.g. .json manifests), either scope the notification with key
+prefix/suffix filters or teach the validator about those extensions.
+
 ### To be created next
 
 - [ ] Main Lambda + API Gateway HTTP API
