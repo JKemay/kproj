@@ -8,8 +8,9 @@ import { AuthGuard, useAppUser } from '@/components/AuthGuard';
 import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
 import { ImageDropGrid } from '@/components/ui/ImageDropGrid';
 import { TagInput } from '@/components/ui/TagInput';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { apiFetch } from '@/lib/api';
-import { type Era, createEra, listEras } from '@/lib/eras';
+import { type Era, createEra, deleteEra, listEras, updateEra } from '@/lib/eras';
 import { type AllowedMime, registerMedia, uploadFiles } from '@/lib/media';
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase().trim();
@@ -72,6 +73,7 @@ function AdminPanel() {
         </div>
         <CreateGroupForm idToken={idToken} />
         <CreateMemberForm idToken={idToken} />
+        <ErasSection idToken={idToken} />
         <UploadSection idToken={idToken} />
       </main>
     </div>
@@ -186,6 +188,145 @@ function CreateMemberForm({ idToken }: { idToken: string | null }) {
         <SubmitBtn status={status}>Create member</SubmitBtn>
         <StatusLine status={status} />
       </form>
+    </section>
+  );
+}
+
+function ErasSection({ idToken }: { idToken: string | null }) {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupId, setGroupId] = useState('');
+  const [eras, setEras] = useState<Era[]>([]);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Era | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<Status>({ kind: 'idle' });
+
+  useEffect(() => {
+    if (!idToken) return;
+    apiFetch<{ groups: Group[] }>('/groups', { idToken }).then((r) => setGroups(r.groups)).catch(() => {});
+  }, [idToken]);
+
+  const loadEras = (id: string) => {
+    setGroupId(id);
+    setEditId(null);
+    if (!idToken || !id) { setEras([]); return; }
+    listEras(id, idToken).then((r) => setEras(r.eras)).catch(() => setEras([]));
+  };
+
+  const onRename = async (era: Era) => {
+    if (!idToken || !editLabel.trim() || busy) return;
+    setBusy(true);
+    try {
+      const res = await updateEra(era.id, { label: editLabel.trim() }, idToken);
+      setEras((prev) => prev.map((e) => (e.id === era.id ? res.era : e)));
+      setEditId(null);
+      setStatus({ kind: 'ok', message: 'Era renamed.' });
+    } catch (e) {
+      setStatus({ kind: 'err', message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onConfirmDelete = async () => {
+    if (!idToken || !deleteTarget || busy) return;
+    setBusy(true);
+    try {
+      await deleteEra(deleteTarget.id, idToken);
+      setEras((prev) => prev.filter((e) => e.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setStatus({ kind: 'ok', message: 'Era deleted — its media kept, now unassigned.' });
+    } catch (e) {
+      setStatus({ kind: 'err', message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <SectionLabel>Manage Eras</SectionLabel>
+      <div className="max-w-xl space-y-3">
+        <SelectField label="Group" value={groupId} onChange={loadEras}>
+          <option value="">Select group</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </SelectField>
+
+        {groupId && eras.length === 0 && (
+          <p className="text-sm text-[#525252]">No eras yet — create one in the upload form below.</p>
+        )}
+
+        {eras.length > 0 && (
+          <ul className="divide-y divide-white/[0.05] rounded-sm border border-white/[0.06] bg-[#111111]">
+            {eras.map((era) => (
+              <li key={era.id} className="flex items-center gap-2 px-3 py-2">
+                {editId === era.id ? (
+                  <>
+                    <input
+                      value={editLabel}
+                      onChange={(e) => setEditLabel(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); void onRename(era); }
+                        if (e.key === 'Escape') setEditId(null);
+                      }}
+                      autoFocus
+                      className="flex-1 rounded-sm border border-white/8 bg-[#0d0d0d] px-2 py-1 text-sm text-[#f0f0f0] focus:outline-none focus:ring-1 focus:ring-[#c084fc]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void onRename(era)}
+                      disabled={busy || !editLabel.trim()}
+                      className="text-[11px] text-[#c084fc] hover:text-[#a855f7] disabled:opacity-40"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditId(null)}
+                      className="text-[11px] text-[#525252] hover:text-[#a0a0a0]"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-[#e0e0e0]">{era.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setEditId(era.id); setEditLabel(era.label); }}
+                      className="text-[11px] text-[#525252] hover:text-[#c084fc] transition-colors"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(era)}
+                      className="text-[11px] text-[#525252] hover:text-red-400 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <StatusLine status={status} />
+      </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={`Delete era "${deleteTarget?.label ?? ''}"?`}
+        message="Media in this era is kept — it just becomes unassigned (no era)."
+        confirmLabel={busy ? 'Deleting…' : 'Delete era'}
+        destructive
+        onConfirm={onConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </section>
   );
 }
