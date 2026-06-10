@@ -8,9 +8,11 @@
     "build:api": "node scripts/build.mjs src/index.ts dist/index.mjs",
     "build:migrate": "node scripts/build.mjs src/migrate.ts dist/migrate.mjs",
     "build:presignup": "node scripts/build.mjs src/presignup.ts dist/presignup.mjs",
+    "build:validate": "node scripts/build.mjs src/validate.ts dist/validate.mjs",
     "package:api": "pnpm build:api && cd dist && zip -r ../api.zip index.mjs && cd ..",
     "package:migrate": "pnpm build:migrate && rm -rf dist/migrations && cp -r ../db/migrations dist/migrations && cd dist && zip -r ../migrate.zip migrate.mjs migrations && cd ..",
     "package:presignup": "pnpm build:presignup && cd dist && zip ../presignup.zip presignup.mjs && cd ..",
+    "package:validate": "pnpm build:validate && cd dist && zip ../validate.zip validate.mjs && cd ..",
     "dev": "tsx watch src/local.ts",
     "typecheck": "tsc --noEmit"
   },
