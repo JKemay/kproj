@@ -11,6 +11,7 @@ import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EditEntityForm } from '@/components/ui/EditEntityForm';
 import { EraTabs } from '@/components/ui/EraTabs';
+import { Lightbox } from '@/components/ui/Lightbox';
 import { MediaMasonry } from '@/components/ui/MediaMasonry';
 import { MediaTile } from '@/components/ui/MediaTile';
 import { apiFetch } from '@/lib/api';
@@ -53,6 +54,7 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
   const [deleteTarget, setDeleteTarget] = useState<MediaRow | null>(null);
   const [captionTarget, setCaptionTarget] = useState<MediaRow | null>(null);
   const [editingMember, setEditingMember] = useState(false);
+  const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
@@ -181,14 +183,16 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
   const visibleRows =
     activeEraId === 'all' ? mediaRows : mediaRows.filter((m) => m.eraId === activeEraId);
 
-  const masonryItems = visibleRows
-    .filter((m) => urls[m.s3Key])
-    .map((m) => ({
-      key: m.s3Key,
-      signedUrl: urls[m.s3Key]!,
-      kind: m.kind,
-      caption: m.caption ?? undefined,
-    }));
+  // Rows whose signed URL has arrived — the grid, masonry, and lightbox all
+  // index into this same array so prev/next stays consistent.
+  const viewable = visibleRows.filter((m) => urls[m.s3Key]);
+
+  const masonryItems = viewable.map((m) => ({
+    key: m.s3Key,
+    signedUrl: urls[m.s3Key]!,
+    kind: m.kind,
+    caption: m.caption ?? undefined,
+  }));
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
@@ -282,18 +286,17 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
                 <p className="text-sm text-[#525252] py-12 text-center">No media yet.</p>
               ) : (
                 <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-                  {visibleRows
-                    .filter((m) => urls[m.s3Key])
-                    .map((m) => (
-                      <MediaTile
-                        key={m.id}
-                        item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
-                        isProfile={member.profileMediaKey === m.s3Key}
-                        onSetProfile={() => onSetProfile(m)}
-                        onDelete={() => setDeleteTarget(m)}
-                        onEditCaption={() => setCaptionTarget(m)}
-                      />
-                    ))}
+                  {viewable.map((m, i) => (
+                    <MediaTile
+                      key={m.id}
+                      item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
+                      isProfile={member.profileMediaKey === m.s3Key}
+                      onSetProfile={() => onSetProfile(m)}
+                      onDelete={() => setDeleteTarget(m)}
+                      onEditCaption={() => setCaptionTarget(m)}
+                      onView={() => setViewerIdx(i)}
+                    />
+                  ))}
                 </div>
               )
             ) : (
@@ -324,6 +327,20 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
           saving={busy}
           onSave={onSaveMedia}
           onCancel={() => setCaptionTarget(null)}
+        />
+      )}
+
+      {viewerIdx !== null && viewable[viewerIdx] && (
+        <Lightbox
+          open
+          onClose={() => setViewerIdx(null)}
+          item={{
+            signedUrl: urls[viewable[viewerIdx].s3Key]!,
+            kind: viewable[viewerIdx].kind,
+            caption: viewable[viewerIdx].caption ?? undefined,
+          }}
+          onPrev={viewerIdx > 0 ? () => setViewerIdx(viewerIdx - 1) : undefined}
+          onNext={viewerIdx < viewable.length - 1 ? () => setViewerIdx(viewerIdx + 1) : undefined}
         />
       )}
 

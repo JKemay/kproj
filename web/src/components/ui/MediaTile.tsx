@@ -12,6 +12,8 @@ interface MediaTileProps {
   onSetProfile: () => void;
   onDelete: () => void;
   onEditCaption: () => void;
+  /** Click on the media itself (not the control buttons) — e.g. open a lightbox. */
+  onView?: () => void;
   /** Tooltip for the star action; defaults to profile-photo wording. */
   starTitle?: string;
   starActiveTitle?: string;
@@ -23,11 +25,15 @@ export function MediaTile({
   onSetProfile,
   onDelete,
   onEditCaption,
+  onView,
   starTitle = 'Set as profile photo',
   starActiveTitle = 'Profile photo',
 }: MediaTileProps) {
   return (
-    <div className="group relative block w-full overflow-hidden rounded-sm bg-[#111111] border border-white/5 break-inside-avoid mb-3">
+    <div
+      onClick={onView}
+      className={`group relative block w-full overflow-hidden rounded-sm bg-[#111111] border border-white/5 break-inside-avoid mb-3 ${onView ? 'cursor-zoom-in' : ''}`}
+    >
       {item.kind === 'video' ? (
         <video
           src={item.signedUrl}

@@ -12,6 +12,7 @@ import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EditEntityForm } from '@/components/ui/EditEntityForm';
 import { EraTabs } from '@/components/ui/EraTabs';
+import { Lightbox } from '@/components/ui/Lightbox';
 import { MediaMasonry } from '@/components/ui/MediaMasonry';
 import { MediaTile } from '@/components/ui/MediaTile';
 import { MemberCard } from '@/components/ui/MemberCard';
@@ -73,6 +74,7 @@ function GroupView({ groupId }: { groupId: string }) {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MediaRow | null>(null);
   const [captionTarget, setCaptionTarget] = useState<MediaRow | null>(null);
+  const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
@@ -202,9 +204,15 @@ function GroupView({ groupId }: { groupId: string }) {
   const visibleMedia =
     activeEraId === 'all' ? groupMedia : groupMedia.filter((m) => m.eraId === activeEraId);
 
-  const groupMasonryItems = visibleMedia
-    .filter((m) => urls[m.s3Key])
-    .map((m) => ({ key: m.s3Key, signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }));
+  // Same array drives the admin grid, masonry, and lightbox navigation.
+  const viewable = visibleMedia.filter((m) => urls[m.s3Key]);
+
+  const groupMasonryItems = viewable.map((m) => ({
+    key: m.s3Key,
+    signedUrl: urls[m.s3Key]!,
+    kind: m.kind,
+    caption: m.caption ?? undefined,
+  }));
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
@@ -340,20 +348,19 @@ function GroupView({ groupId }: { groupId: string }) {
                   </p>
                 ) : isAdmin ? (
                   <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-                    {visibleMedia
-                      .filter((m) => urls[m.s3Key])
-                      .map((m) => (
-                        <MediaTile
-                          key={m.id}
-                          item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
-                          isProfile={group.coverMediaKey === m.s3Key}
-                          starTitle="Set as group cover"
-                          starActiveTitle="Group cover"
-                          onSetProfile={() => onSetCover(m)}
-                          onDelete={() => setDeleteTarget(m)}
-                          onEditCaption={() => setCaptionTarget(m)}
-                        />
-                      ))}
+                    {viewable.map((m, i) => (
+                      <MediaTile
+                        key={m.id}
+                        item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
+                        isProfile={group.coverMediaKey === m.s3Key}
+                        starTitle="Set as group cover"
+                        starActiveTitle="Group cover"
+                        onSetProfile={() => onSetCover(m)}
+                        onDelete={() => setDeleteTarget(m)}
+                        onEditCaption={() => setCaptionTarget(m)}
+                        onView={() => setViewerIdx(i)}
+                      />
+                    ))}
                   </div>
                 ) : (
                   <MediaMasonry items={groupMasonryItems} />
@@ -391,6 +398,20 @@ function GroupView({ groupId }: { groupId: string }) {
           saving={busy}
           onSave={onSaveMedia}
           onCancel={() => setCaptionTarget(null)}
+        />
+      )}
+
+      {viewerIdx !== null && viewable[viewerIdx] && (
+        <Lightbox
+          open
+          onClose={() => setViewerIdx(null)}
+          item={{
+            signedUrl: urls[viewable[viewerIdx].s3Key]!,
+            kind: viewable[viewerIdx].kind,
+            caption: viewable[viewerIdx].caption ?? undefined,
+          }}
+          onPrev={viewerIdx > 0 ? () => setViewerIdx(viewerIdx - 1) : undefined}
+          onNext={viewerIdx < viewable.length - 1 ? () => setViewerIdx(viewerIdx + 1) : undefined}
         />
       )}
 

@@ -9,6 +9,7 @@ import { MediaEditModal } from '@/components/MediaEditModal';
 import { AccessDenied } from '@/components/ui/AccessDenied';
 import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Lightbox } from '@/components/ui/Lightbox';
 import { MediaTile } from '@/components/ui/MediaTile';
 import { TopicHero } from '@/components/ui/TopicHero';
 import { ApiError, apiFetch } from '@/lib/api';
@@ -40,6 +41,7 @@ function Heaven() {
 
   const [deleteTarget, setDeleteTarget] = useState<MediaRow | null>(null);
   const [editTarget, setEditTarget] = useState<MediaRow | null>(null);
+  const [viewerIdx, setViewerIdx] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
@@ -80,6 +82,7 @@ function Heaven() {
 
   const keys = mediaRows.map((m) => m.s3Key);
   const { urls } = useSignedUrls(keys, idToken);
+  const viewable = mediaRows.filter((m) => urls[m.s3Key]);
 
   const onConfirmDelete = async () => {
     if (!idToken || !deleteTarget) return;
@@ -150,19 +153,18 @@ function Heaven() {
             </p>
           ) : (
             <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-              {mediaRows
-                .filter((m) => urls[m.s3Key])
-                .map((m) => (
-                  <MediaTile
-                    key={m.id}
-                    item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
-                    isProfile={false}
-                    starTitle="—"
-                    onSetProfile={() => {}}
-                    onDelete={() => setDeleteTarget(m)}
-                    onEditCaption={() => setEditTarget(m)}
-                  />
-                ))}
+              {viewable.map((m, i) => (
+                <MediaTile
+                  key={m.id}
+                  item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
+                  isProfile={false}
+                  starTitle="—"
+                  onSetProfile={() => {}}
+                  onDelete={() => setDeleteTarget(m)}
+                  onEditCaption={() => setEditTarget(m)}
+                  onView={() => setViewerIdx(i)}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -185,6 +187,20 @@ function Heaven() {
           saving={busy}
           onSave={onSaveMedia}
           onCancel={() => setEditTarget(null)}
+        />
+      )}
+
+      {viewerIdx !== null && viewable[viewerIdx] && (
+        <Lightbox
+          open
+          onClose={() => setViewerIdx(null)}
+          item={{
+            signedUrl: urls[viewable[viewerIdx].s3Key]!,
+            kind: viewable[viewerIdx].kind,
+            caption: viewable[viewerIdx].caption ?? undefined,
+          }}
+          onPrev={viewerIdx > 0 ? () => setViewerIdx(viewerIdx - 1) : undefined}
+          onNext={viewerIdx < viewable.length - 1 ? () => setViewerIdx(viewerIdx + 1) : undefined}
         />
       )}
 
