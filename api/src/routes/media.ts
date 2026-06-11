@@ -6,11 +6,16 @@ import { randomUUID } from 'node:crypto';
 
 import { zValidator } from '@hono/zod-validator';
 import { groups, media, members } from '@kproj/db/schema';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { getDb } from '../db/client.js';
-import { requireAdmin } from '../middleware/requireAdmin.js';
+import {
+  HEAVEN_GROUP_ID,
+  HEAVEN_KEY_PREFIX,
+  isAdminEmail,
+  requireAdmin,
+} from '../middleware/requireAdmin.js';
 import {
   registerMediaBody,
   signReadsBody,
@@ -28,7 +33,13 @@ route.get('/recent', async (c) => {
   const limitRaw = Number.parseInt(c.req.query('limit') ?? '20', 10);
   const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 20, 1), 50);
   const db = await getDb();
-  const rows = await db.select().from(media).orderBy(desc(media.uploadedAt)).limit(limit);
+  const isAdmin = isAdminEmail(c.get('user').email);
+  const rows = await db
+    .select()
+    .from(media)
+    .where(isAdmin ? undefined : ne(media.groupId, HEAVEN_GROUP_ID))
+    .orderBy(desc(media.uploadedAt))
+    .limit(limit);
   return c.json({ media: rows });
 });
 
@@ -44,6 +55,9 @@ route.get('/', async (c) => {
   const eraId = c.req.query('eraId');
   const groupOnly = c.req.query('groupOnly') === '1';
   if (!groupId) return c.json({ error: 'groupId query param required' }, 400);
+  if (groupId === HEAVEN_GROUP_ID && !isAdminEmail(c.get('user').email)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   const conds = [eq(media.groupId, groupId)];
   if (memberId) conds.push(eq(media.memberId, memberId));
@@ -83,9 +97,16 @@ route.post('/sign-uploads', requireAdmin, zValidator('json', signUploadsBody), a
   return c.json({ results });
 });
 
-// POST /media/sign-reads — any allowlisted user
+// POST /media/sign-reads — any allowlisted user.
+// Heaven keys are admin-only: a leaked key must not be signable by others.
 route.post('/sign-reads', zValidator('json', signReadsBody), async (c) => {
   const body = c.req.valid('json');
+  if (
+    !isAdminEmail(c.get('user').email) &&
+    body.keys.some((k) => k.startsWith(HEAVEN_KEY_PREFIX))
+  ) {
+    return c.json({ error: 'Not found', code: 'FORBIDDEN_KEY' }, 404);
+  }
   const entries = await Promise.all(
     body.keys.map(async (key) => [key, await signRead(key)] as const),
   );

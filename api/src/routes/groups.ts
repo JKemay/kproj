@@ -11,7 +11,7 @@ import { and, asc, count, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { getDb } from '../db/client.js';
-import { requireAdmin } from '../middleware/requireAdmin.js';
+import { HEAVEN_GROUP_ID, isAdminEmail, requireAdmin } from '../middleware/requireAdmin.js';
 import { createEraBody } from '../schemas/eras.js';
 import {
   createGroupBody,
@@ -43,11 +43,18 @@ route.get('/', async (c) => {
     .leftJoin(members, eq(members.groupId, groups.id))
     .groupBy(groups.id)
     .orderBy(asc(groups.name));
-  return c.json({ groups: rows });
+  const visible = isAdminEmail(c.get('user').email)
+    ? rows
+    : rows.filter((g) => g.id !== HEAVEN_GROUP_ID);
+  return c.json({ groups: visible });
 });
 
 route.get('/:id', async (c) => {
   const id = c.req.param('id');
+  // Heaven 404s (not 403) for non-admins so its existence isn't confirmed.
+  if (id === HEAVEN_GROUP_ID && !isAdminEmail(c.get('user').email)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
   const db = await getDb();
   const [row] = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
   if (!row) return c.json({ error: 'Not found' }, 404);
@@ -162,6 +169,9 @@ route.patch(
 
 route.get('/:id/eras', async (c) => {
   const groupId = c.req.param('id');
+  if (groupId === HEAVEN_GROUP_ID && !isAdminEmail(c.get('user').email)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
   const db = await getDb();
   const rows = await db
     .select()

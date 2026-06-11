@@ -1,14 +1,126 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
 import { AuthGuard, useIsAdmin } from '@/components/AuthGuard';
+import { MediaEditModal } from '@/components/MediaEditModal';
 import { AccessDenied } from '@/components/ui/AccessDenied';
+import { ConfirmBanner } from '@/components/ui/ConfirmBanner';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { MediaTile } from '@/components/ui/MediaTile';
+import { TopicHero } from '@/components/ui/TopicHero';
+import { ApiError, apiFetch } from '@/lib/api';
+import { type Era, listEras } from '@/lib/eras';
+import { type MediaPatch, deleteMedia, updateMedia } from '@/lib/media';
+import { useSignedUrls } from '@/lib/useSignedUrls';
+
+// Reserved id — the backend hides this group from every non-admin read path.
+const HEAVEN_ID = 'six-heaven';
+
+interface MediaRow {
+  id: string;
+  s3Key: string;
+  kind: 'image' | 'gif' | 'video';
+  caption: string | null;
+  eraId: string | null;
+  tags: string[];
+}
 
 function Heaven() {
-  const router = useRouter();
+  const auth = useAuth();
   const isAdmin = useIsAdmin();
+  const idToken = auth.user?.id_token ?? null;
+
+  const [ready, setReady] = useState(false);
+  const [mediaRows, setMediaRows] = useState<MediaRow[]>([]);
+  const [eras, setEras] = useState<Era[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const [deleteTarget, setDeleteTarget] = useState<MediaRow | null>(null);
+  const [editTarget, setEditTarget] = useState<MediaRow | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
+
+  const load = useMemo(
+    () => () => {
+      if (!idToken || !isAdmin) return;
+      // Self-provision the reserved group on first visit, then load contents.
+      apiFetch(`/groups/${HEAVEN_ID}`, { idToken })
+        .catch((e) => {
+          if (e instanceof ApiError && e.status === 404) {
+            return apiFetch('/groups', {
+              method: 'POST',
+              idToken,
+              body: { id: HEAVEN_ID, name: "6ix's Heaven", kind: 'topic' },
+            });
+          }
+          throw e;
+        })
+        .then(() =>
+          Promise.all([
+            apiFetch<{ media: MediaRow[] }>(`/media?groupId=${HEAVEN_ID}&groupOnly=1`, { idToken }),
+            listEras(HEAVEN_ID, idToken),
+          ]),
+        )
+        .then(([md, er]) => {
+          setMediaRows(md.media);
+          setEras(er.eras);
+          setReady(true);
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    },
+    [idToken, isAdmin],
+  );
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const keys = mediaRows.map((m) => m.s3Key);
+  const { urls } = useSignedUrls(keys, idToken);
+
+  const onConfirmDelete = async () => {
+    if (!idToken || !deleteTarget) return;
+    setBusy(true);
+    try {
+      await deleteMedia(deleteTarget.id, idToken);
+      setMediaRows((rows) => rows.filter((r) => r.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      setBanner({ message: 'Deleted', variant: 'success' });
+    } catch (e) {
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSaveMedia = async (patch: MediaPatch) => {
+    if (!idToken || !editTarget) return;
+    setBusy(true);
+    try {
+      await updateMedia(editTarget.id, patch, idToken);
+      setMediaRows((rows) =>
+        rows.map((r) =>
+          r.id === editTarget.id
+            ? {
+                ...r,
+                caption: patch.caption ?? null,
+                tags: patch.tags ?? r.tags,
+                eraId: patch.eraId !== undefined ? patch.eraId : r.eraId,
+              }
+            : r,
+        ),
+      );
+      setEditTarget(null);
+      setBanner({ message: 'Saved', variant: 'success' });
+    } catch (e) {
+      setBanner({ message: e instanceof Error ? e.message : String(e), variant: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Private room — only the owner. Other allowlisted users get denied.
   if (!isAdmin) {
@@ -18,40 +130,67 @@ function Heaven() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-[#f0f0f0]">
       <AppNav currentPath="heaven" />
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-44px)] px-6 text-center">
-        <div className="relative mb-8">
-          <div
-            className="absolute inset-0 -m-12 rounded-full opacity-[0.06] blur-2xl pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse at center, #c084fc, transparent 70%)' }}
-          />
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="relative text-[#c084fc]/40">
-            <polygon
-              points="16,2 19.5,11 29.5,11.5 22,18 24.5,28 16,23 7.5,28 10,18 2.5,11.5 12.5,11"
-              fill="currentColor"
-            />
-          </svg>
+
+      <div className="mx-auto max-w-[1600px] px-5 sm:px-8 pb-10">
+        <TopicHero
+          title="6ix's Heaven"
+          subtitle="Private room — only you can see this."
+          mediaCount={mediaRows.length}
+        />
+
+        <div className="pt-10">
+          {error ? (
+            <p className="text-red-400/80 text-sm text-center">{error}</p>
+          ) : !ready ? (
+            <p className="text-[#525252] text-sm text-center">Loading…</p>
+          ) : mediaRows.length === 0 ? (
+            <p className="text-sm text-[#525252] py-12 text-center">
+              Empty so far. Upload from <a href="/admin" className="underline hover:text-[#c084fc]">/admin</a>{' '}
+              — pick &ldquo;6ix&rsquo;s Heaven&rdquo; as the group.
+            </p>
+          ) : (
+            <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
+              {mediaRows
+                .filter((m) => urls[m.s3Key])
+                .map((m) => (
+                  <MediaTile
+                    key={m.id}
+                    item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
+                    isProfile={false}
+                    starTitle="—"
+                    onSetProfile={() => {}}
+                    onDelete={() => setDeleteTarget(m)}
+                    onEditCaption={() => setEditTarget(m)}
+                  />
+                ))}
+            </div>
+          )}
         </div>
-        <h1
-          className="text-[2.5rem] sm:text-[4rem] font-normal tracking-tight text-[#f0f0f0] leading-none mb-4"
-          style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
-        >
-          6ix&rsquo;s Heaven
-        </h1>
-        <p className="text-[11px] tracking-[0.22em] uppercase text-[#383838] mb-12">Coming soon</p>
-        <button
-          onClick={() => router.push('/')}
-          className="flex items-center gap-2 text-[10px] tracking-[0.18em] uppercase text-[#404040] hover:text-[#737373] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#c084fc] rounded-sm group"
-        >
-          <svg
-            width="11" height="11" viewBox="0 0 11 11" fill="none"
-            stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"
-            className="group-hover:-translate-x-0.5 transition-transform duration-150"
-          >
-            <path d="M7 1L2 5.5 7 10" />
-          </svg>
-          Back to archive
-        </button>
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Delete this media?"
+        message="The file and its record will be permanently removed. This cannot be undone."
+        confirmLabel={busy ? 'Deleting…' : 'Delete'}
+        destructive
+        onConfirm={onConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {editTarget && (
+        <MediaEditModal
+          initial={{ caption: editTarget.caption, tags: editTarget.tags ?? [], eraId: editTarget.eraId }}
+          eras={eras}
+          saving={busy}
+          onSave={onSaveMedia}
+          onCancel={() => setEditTarget(null)}
+        />
+      )}
+
+      {banner && (
+        <ConfirmBanner message={banner.message} variant={banner.variant} onDismiss={() => setBanner(null)} />
+      )}
     </div>
   );
 }
