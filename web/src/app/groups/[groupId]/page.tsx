@@ -124,9 +124,12 @@ function GroupView({ groupId }: { groupId: string }) {
     };
   }, [groupId, idToken]);
 
-  // Sign member profile keys + group photo keys (+ thumbs) + cover in one batch.
+  // Sign member profile keys (+ image-convention thumbs) + group photo keys
+  // (+ thumbs) + cover in one batch.
+  const profileKeys = members.map((m) => m.profileMediaKey).filter((k): k is string => !!k);
   const signKeys = [
-    ...members.map((m) => m.profileMediaKey).filter((k): k is string => !!k),
+    ...profileKeys,
+    ...profileKeys.map((k) => thumbKeyFor(k, 'image')!),
     ...groupMedia.map((m) => m.s3Key),
     ...groupMedia.flatMap((m) => {
       const t = thumbKeyFor(m.s3Key, m.kind);
@@ -307,18 +310,24 @@ function GroupView({ groupId }: { groupId: string }) {
                   <div className="h-px flex-1 bg-white/[0.05]" />
                 </div>
                 <div className="grid grid-cols-3 gap-4 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-                  {members.map((m) => (
-                    <MemberCard
-                      key={m.id}
-                      member={{
-                        id: m.id,
-                        stageName: m.stageName,
-                        position: m.position ?? '',
-                        profileUrl: m.profileMediaKey ? urls[m.profileMediaKey] : undefined,
-                      }}
-                      onClick={() => router.push(`/groups/${groupId}/members/${m.id}`)}
-                    />
-                  ))}
+                  {members.map((m) => {
+                    const orig = m.profileMediaKey ? urls[m.profileMediaKey] : undefined;
+                    const tk = m.profileMediaKey ? thumbKeyFor(m.profileMediaKey, 'image') : null;
+                    const thumb = tk ? urls[tk] : undefined;
+                    return (
+                      <MemberCard
+                        key={m.id}
+                        member={{
+                          id: m.id,
+                          stageName: m.stageName,
+                          position: m.position ?? '',
+                          profileUrl: thumb ?? orig,
+                          profileFallbackUrl: orig,
+                        }}
+                        onClick={() => router.push(`/groups/${groupId}/members/${m.id}`)}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -1,8 +1,12 @@
 'use client';
 
+import { FallbackImg } from './FallbackImg';
+
 interface RecentItem {
   id: string;
   signedUrl: string;
+  /** Original-size URL used if signedUrl (a thumbnail) 404s. */
+  fallbackUrl?: string;
   kind: 'image' | 'gif' | 'video';
   label?: string;
 }
@@ -44,8 +48,9 @@ export function RecentStrip({ items, onItemClick }: RecentStripProps) {
                 className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
               />
             ) : (
-              <img
+              <FallbackImg
                 src={item.signedUrl}
+                fallback={item.fallbackUrl}
                 alt={item.label ?? ''}
                 loading="lazy"
                 className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"

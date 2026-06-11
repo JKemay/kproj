@@ -1,11 +1,15 @@
 'use client';
 
+import { FallbackImg } from './FallbackImg';
+
 interface MemberCardProps {
   member: {
     id: string;
     stageName: string;
     position: string;
     profileUrl?: string;
+    /** Original-size URL used if profileUrl (a thumbnail) 404s. */
+    profileFallbackUrl?: string;
   };
   onClick?: () => void;
 }
@@ -23,8 +27,9 @@ export function MemberCard({ member, onClick }: MemberCardProps) {
       <div className="relative overflow-hidden rounded-[3px] bg-[#111111] border border-white/[0.06] aspect-[3/4] transition-all duration-200 group-hover:border-white/[0.14] group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_24px_rgba(0,0,0,0.5)]">
         {hasImage ? (
           <>
-            <img
-              src={member.profileUrl}
+            <FallbackImg
+              src={member.profileUrl!}
+              fallback={member.profileFallbackUrl}
               alt={member.stageName}
               loading="lazy"
               className="absolute inset-0 h-full w-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-[1.03]"

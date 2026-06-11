@@ -12,6 +12,7 @@ import { GroupCardSkeleton } from '@/components/ui/GroupCardSkeleton';
 import { RecentStrip } from '@/components/ui/RecentStrip';
 import { SearchBar } from '@/components/ui/SearchBar';
 import { apiFetch } from '@/lib/api';
+import { thumbKeyFor } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
 interface Group {
@@ -85,21 +86,34 @@ function Dashboard() {
     };
   }, [auth.user?.id_token]);
 
-  // Sign cover images + recent thumbnails in one batch.
+  // Sign covers + recent originals + their derived thumbs in one batch.
+  // Cover kind is unknown (just a key on the group row) — request an
+  // image-convention thumb and let FallbackImg swap to the original if absent.
+  const coverKeys = groups.map((g) => g.coverMediaKey).filter((k): k is string => !!k);
   const signKeys = [
-    ...groups.map((g) => g.coverMediaKey).filter((k): k is string => !!k),
+    ...coverKeys,
+    ...coverKeys.map((k) => thumbKeyFor(k, 'image')!),
     ...recent.map((r) => r.s3Key),
+    ...recent.flatMap((r) => {
+      const t = thumbKeyFor(r.s3Key, r.kind);
+      return t ? [t] : [];
+    }),
   ];
   const { urls: coverUrls } = useSignedUrls(signKeys, auth.user?.id_token ?? null);
 
   const recentItems = recent
     .filter((r) => coverUrls[r.s3Key])
-    .map((r) => ({
-      id: r.id,
-      signedUrl: coverUrls[r.s3Key]!,
-      kind: r.kind,
-      label: r.caption ?? undefined,
-    }));
+    .map((r) => {
+      const tk = thumbKeyFor(r.s3Key, r.kind);
+      const thumbUrl = tk ? coverUrls[tk] : undefined;
+      return {
+        id: r.id,
+        signedUrl: thumbUrl ?? coverUrls[r.s3Key]!,
+        fallbackUrl: coverUrls[r.s3Key],
+        kind: r.kind,
+        label: r.caption ?? undefined,
+      };
+    });
 
   const onRecentClick = (id: string) => {
     const row = recent.find((r) => r.id === id);
@@ -180,20 +194,26 @@ function Dashboard() {
             }
             return (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                {filtered.map((g) => (
-                  <GroupCard
-                    key={g.id}
-                    group={{
-                      id: g.id,
-                      name: g.name,
-                      agency: g.agency ?? undefined,
-                      debutYear: g.debutYear ?? undefined,
-                      coverUrl: g.coverMediaKey ? coverUrls[g.coverMediaKey] : undefined,
-                      memberTags: cardTag(g),
-                    }}
-                    onClick={() => router.push(`/groups/${g.id}`)}
-                  />
-                ))}
+                {filtered.map((g) => {
+                  const orig = g.coverMediaKey ? coverUrls[g.coverMediaKey] : undefined;
+                  const tk = g.coverMediaKey ? thumbKeyFor(g.coverMediaKey, 'image') : null;
+                  const thumb = tk ? coverUrls[tk] : undefined;
+                  return (
+                    <GroupCard
+                      key={g.id}
+                      group={{
+                        id: g.id,
+                        name: g.name,
+                        agency: g.agency ?? undefined,
+                        debutYear: g.debutYear ?? undefined,
+                        coverUrl: thumb ?? orig,
+                        coverFallbackUrl: orig,
+                        memberTags: cardTag(g),
+                      }}
+                      onClick={() => router.push(`/groups/${g.id}`)}
+                    />
+                  );
+                })}
               </div>
             );
           })()

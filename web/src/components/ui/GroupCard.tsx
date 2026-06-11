@@ -1,5 +1,7 @@
 'use client';
 
+import { FallbackImg } from './FallbackImg';
+
 interface GroupCardProps {
   group: {
     id: string;
@@ -7,6 +9,8 @@ interface GroupCardProps {
     debutYear?: number;
     agency?: string;
     coverUrl?: string;
+    /** Original-size URL used if coverUrl (a thumbnail) 404s. */
+    coverFallbackUrl?: string;
     memberTags?: string[];
   };
   onClick?: () => void;
@@ -24,8 +28,9 @@ export function GroupCard({ group, onClick }: GroupCardProps) {
     >
       {hasImage ? (
         <>
-          <img
-            src={group.coverUrl}
+          <FallbackImg
+            src={group.coverUrl!}
+            fallback={group.coverFallbackUrl}
             alt={group.name}
             loading="lazy"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
