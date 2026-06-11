@@ -20,6 +20,8 @@ await build({
   banner: {
     js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
   },
-  external: ['pg-native'],
+  // sharp comes from the kproj-sharp Lambda layer (native linux-arm64 binaries
+  // can't be bundled); pg-native is an optional pg dep that's never installed.
+  external: ['pg-native', 'sharp'],
   logLevel: 'info',
 });

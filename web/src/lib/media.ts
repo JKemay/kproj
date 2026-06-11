@@ -121,6 +121,18 @@ export async function getSignedUrls(
   return res.urls;
 }
 
+// ----- Thumbnails -----
+
+/**
+ * Derived-thumbnail key for an original, by pipeline convention
+ * (see api/src/validate.ts). GIFs have no thumb — resizing loses animation —
+ * so callers fall back to the original.
+ */
+export function thumbKeyFor(s3Key: string, kind: 'image' | 'gif' | 'video'): string | null {
+  if (kind === 'gif') return null;
+  return `derived/${s3Key}.thumb.webp`;
+}
+
 // ----- Mutations -----
 
 export function deleteMedia(id: string, idToken: string) {

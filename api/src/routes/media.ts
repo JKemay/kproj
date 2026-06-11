@@ -103,7 +103,9 @@ route.post('/sign-reads', zValidator('json', signReadsBody), async (c) => {
   const body = c.req.valid('json');
   if (
     !isAdminEmail(c.get('user').email) &&
-    body.keys.some((k) => k.startsWith(HEAVEN_KEY_PREFIX))
+    body.keys.some(
+      (k) => k.startsWith(HEAVEN_KEY_PREFIX) || k.startsWith(`derived/${HEAVEN_KEY_PREFIX}`),
+    )
   ) {
     return c.json({ error: 'Not found', code: 'FORBIDDEN_KEY' }, 404);
   }

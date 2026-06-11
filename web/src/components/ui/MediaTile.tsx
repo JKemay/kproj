@@ -2,6 +2,8 @@
 
 interface MediaTileItem {
   signedUrl: string;
+  /** Full-size URL to swap in if signedUrl 404s (e.g. thumb not generated yet). */
+  fallbackUrl?: string;
   kind: 'image' | 'gif' | 'video';
   caption?: string;
 }
@@ -49,6 +51,13 @@ export function MediaTile({
           alt={item.caption ?? ''}
           loading="lazy"
           className="w-full object-cover"
+          onError={(e) => {
+            // Thumb missing (old upload, processing lag) — swap to the original once.
+            const img = e.currentTarget;
+            if (item.fallbackUrl && img.src !== item.fallbackUrl) {
+              img.src = item.fallbackUrl;
+            }
+          }}
         />
       )}
 

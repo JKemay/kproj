@@ -17,7 +17,7 @@ import { MediaTile } from '@/components/ui/MediaTile';
 import { apiFetch } from '@/lib/api';
 import { updateMember } from '@/lib/entities';
 import { type Era, listEras } from '@/lib/eras';
-import { type MediaPatch, deleteMedia, updateMedia } from '@/lib/media';
+import { type MediaPatch, deleteMedia, thumbKeyFor, updateMedia } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
 interface Member {
@@ -82,6 +82,10 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
 
   const allKeys = [
     ...mediaRows.map((m) => m.s3Key),
+    ...mediaRows.flatMap((m) => {
+      const t = thumbKeyFor(m.s3Key, m.kind);
+      return t ? [t] : [];
+    }),
     ...(member?.profileMediaKey ? [member.profileMediaKey] : []),
   ];
   const { urls } = useSignedUrls(allKeys, idToken);
@@ -286,17 +290,26 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
                 <p className="text-sm text-[#525252] py-12 text-center">No media yet.</p>
               ) : (
                 <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-                  {viewable.map((m, i) => (
-                    <MediaTile
-                      key={m.id}
-                      item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
-                      isProfile={member.profileMediaKey === m.s3Key}
-                      onSetProfile={() => onSetProfile(m)}
-                      onDelete={() => setDeleteTarget(m)}
-                      onEditCaption={() => setCaptionTarget(m)}
-                      onView={() => setViewerIdx(i)}
-                    />
-                  ))}
+                  {viewable.map((m, i) => {
+                    const tk = thumbKeyFor(m.s3Key, m.kind);
+                    const thumbUrl = tk ? urls[tk] : undefined;
+                    return (
+                      <MediaTile
+                        key={m.id}
+                        item={{
+                          signedUrl: thumbUrl ?? urls[m.s3Key]!,
+                          fallbackUrl: urls[m.s3Key],
+                          kind: m.kind,
+                          caption: m.caption ?? undefined,
+                        }}
+                        isProfile={member.profileMediaKey === m.s3Key}
+                        onSetProfile={() => onSetProfile(m)}
+                        onDelete={() => setDeleteTarget(m)}
+                        onEditCaption={() => setCaptionTarget(m)}
+                        onView={() => setViewerIdx(i)}
+                      />
+                    );
+                  })}
                 </div>
               )
             ) : (

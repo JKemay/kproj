@@ -21,7 +21,7 @@ import { TopicHero } from '@/components/ui/TopicHero';
 import { apiFetch } from '@/lib/api';
 import { updateGroup } from '@/lib/entities';
 import { type Era, listEras } from '@/lib/eras';
-import { type MediaPatch, deleteMedia, updateMedia } from '@/lib/media';
+import { type MediaPatch, deleteMedia, thumbKeyFor, updateMedia } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
 interface Group {
@@ -124,10 +124,14 @@ function GroupView({ groupId }: { groupId: string }) {
     };
   }, [groupId, idToken]);
 
-  // Sign member profile keys + group photo keys + the cover key in one batch.
+  // Sign member profile keys + group photo keys (+ thumbs) + cover in one batch.
   const signKeys = [
     ...members.map((m) => m.profileMediaKey).filter((k): k is string => !!k),
     ...groupMedia.map((m) => m.s3Key),
+    ...groupMedia.flatMap((m) => {
+      const t = thumbKeyFor(m.s3Key, m.kind);
+      return t ? [t] : [];
+    }),
     ...(group?.coverMediaKey ? [group.coverMediaKey] : []),
   ];
   const { urls } = useSignedUrls(signKeys, idToken);
@@ -348,19 +352,28 @@ function GroupView({ groupId }: { groupId: string }) {
                   </p>
                 ) : isAdmin ? (
                   <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-                    {viewable.map((m, i) => (
-                      <MediaTile
-                        key={m.id}
-                        item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
-                        isProfile={group.coverMediaKey === m.s3Key}
-                        starTitle="Set as group cover"
-                        starActiveTitle="Group cover"
-                        onSetProfile={() => onSetCover(m)}
-                        onDelete={() => setDeleteTarget(m)}
-                        onEditCaption={() => setCaptionTarget(m)}
-                        onView={() => setViewerIdx(i)}
-                      />
-                    ))}
+                    {viewable.map((m, i) => {
+                      const tk = thumbKeyFor(m.s3Key, m.kind);
+                      const thumbUrl = tk ? urls[tk] : undefined;
+                      return (
+                        <MediaTile
+                          key={m.id}
+                          item={{
+                            signedUrl: thumbUrl ?? urls[m.s3Key]!,
+                            fallbackUrl: urls[m.s3Key],
+                            kind: m.kind,
+                            caption: m.caption ?? undefined,
+                          }}
+                          isProfile={group.coverMediaKey === m.s3Key}
+                          starTitle="Set as group cover"
+                          starActiveTitle="Group cover"
+                          onSetProfile={() => onSetCover(m)}
+                          onDelete={() => setDeleteTarget(m)}
+                          onEditCaption={() => setCaptionTarget(m)}
+                          onView={() => setViewerIdx(i)}
+                        />
+                      );
+                    })}
                   </div>
                 ) : (
                   <MediaMasonry items={groupMasonryItems} />

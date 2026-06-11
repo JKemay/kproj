@@ -22,6 +22,13 @@
       "when": 1781081532786,
       "tag": "0002_romantic_sugar_man",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781157522054,
+      "tag": "0003_clear_dangling_refs",
+      "breakpoints": true
     }
   ]
 }

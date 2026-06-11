@@ -14,7 +14,7 @@ import { MediaTile } from '@/components/ui/MediaTile';
 import { TopicHero } from '@/components/ui/TopicHero';
 import { ApiError, apiFetch } from '@/lib/api';
 import { type Era, listEras } from '@/lib/eras';
-import { type MediaPatch, deleteMedia, updateMedia } from '@/lib/media';
+import { type MediaPatch, deleteMedia, thumbKeyFor, updateMedia } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
 // Reserved id — the backend hides this group from every non-admin read path.
@@ -80,7 +80,13 @@ function Heaven() {
     load();
   }, [load]);
 
-  const keys = mediaRows.map((m) => m.s3Key);
+  const keys = [
+    ...mediaRows.map((m) => m.s3Key),
+    ...mediaRows.flatMap((m) => {
+      const t = thumbKeyFor(m.s3Key, m.kind);
+      return t ? [t] : [];
+    }),
+  ];
   const { urls } = useSignedUrls(keys, idToken);
   const viewable = mediaRows.filter((m) => urls[m.s3Key]);
 
@@ -153,18 +159,27 @@ function Heaven() {
             </p>
           ) : (
             <div className="columns-2 gap-3 sm:columns-3 md:columns-4 lg:columns-5">
-              {viewable.map((m, i) => (
-                <MediaTile
-                  key={m.id}
-                  item={{ signedUrl: urls[m.s3Key]!, kind: m.kind, caption: m.caption ?? undefined }}
-                  isProfile={false}
-                  starTitle="—"
-                  onSetProfile={() => {}}
-                  onDelete={() => setDeleteTarget(m)}
-                  onEditCaption={() => setEditTarget(m)}
-                  onView={() => setViewerIdx(i)}
-                />
-              ))}
+              {viewable.map((m, i) => {
+                const tk = thumbKeyFor(m.s3Key, m.kind);
+                const thumbUrl = tk ? urls[tk] : undefined;
+                return (
+                  <MediaTile
+                    key={m.id}
+                    item={{
+                      signedUrl: thumbUrl ?? urls[m.s3Key]!,
+                      fallbackUrl: urls[m.s3Key],
+                      kind: m.kind,
+                      caption: m.caption ?? undefined,
+                    }}
+                    isProfile={false}
+                    starTitle="—"
+                    onSetProfile={() => {}}
+                    onDelete={() => setDeleteTarget(m)}
+                    onEditCaption={() => setEditTarget(m)}
+                    onView={() => setViewerIdx(i)}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
