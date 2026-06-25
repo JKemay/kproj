@@ -11,6 +11,7 @@
     "build:web": "pnpm --filter web build",
     "build:api": "pnpm --filter api build",
     "db:generate": "pnpm --filter db generate",
-    "db:migrate": "pnpm --filter db migrate"
+    "db:migrate": "pnpm --filter db migrate",
+    "typecheck": "pnpm -r --if-present typecheck"
   }
 }
