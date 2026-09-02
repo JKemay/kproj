@@ -121,22 +121,38 @@ describe('GET /groups/:id/eras — Heaven gate', () => {
 // These two tests characterize the *current* behavior for regression
 // tracking. They are not an endorsement of it — do not use them as a
 // reference for "correct" behavior when fixing the gap.
-describe('SECURITY GAP (reported, not fixed): members routes have no Heaven guard', () => {
-  it('currently returns six-heaven members to a non-admin', async () => {
+describe('members routes are gated on Heaven like every sibling read path', () => {
+  it('hides six-heaven members from a non-admin', async () => {
     const db = createMockDb();
     const member = makeMemberRow({ groupId: 'six-heaven', id: 'secret-member' });
     db.select.mockReturnValueOnce(queryChain([member]));
     const res = await buildApp(NON_ADMIN, db).request('/groups/six-heaven/members');
-    expect(res.status).toBe(200); // should be 404, matching the parent group's gate
-    const body = (await res.json()) as { members: Array<{ id: string }> };
-    expect(body.members[0]?.id).toBe('secret-member');
+    expect(res.status).toBe(404);
   });
 
-  it('currently returns a single six-heaven member to a non-admin', async () => {
+  it('hides a single six-heaven member from a non-admin', async () => {
     const db = createMockDb();
     const member = makeMemberRow({ groupId: 'six-heaven', id: 'secret-member' });
     db.select.mockReturnValueOnce(queryChain([member]));
     const res = await buildApp(NON_ADMIN, db).request('/groups/six-heaven/members/secret-member');
-    expect(res.status).toBe(200); // should be 404, matching the parent group's gate
+    expect(res.status).toBe(404);
+  });
+
+  it('still serves six-heaven members to the admin', async () => {
+    const db = createMockDb();
+    const member = makeMemberRow({ groupId: 'six-heaven', id: 'secret-member' });
+    db.select.mockReturnValueOnce(queryChain([member]));
+    const res = await buildApp(ADMIN, db).request('/groups/six-heaven/members');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { members: Array<{ id: string }> };
+    expect(body.members[0]?.id).toBe('secret-member');
+  });
+
+  it('leaves ordinary groups readable by a non-admin', async () => {
+    const db = createMockDb();
+    const member = makeMemberRow({ groupId: 'aespa', id: 'karina' });
+    db.select.mockReturnValueOnce(queryChain([member]));
+    const res = await buildApp(NON_ADMIN, db).request('/groups/aespa/members');
+    expect(res.status).toBe(200);
   });
 });

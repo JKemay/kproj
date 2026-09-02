@@ -91,6 +91,12 @@ route.patch('/:id', requireAdmin, zValidator('json', updateGroupBody), async (c)
 
 route.get('/:id/members', async (c) => {
   const groupId = c.req.param('id');
+  // Heaven's members are as private as Heaven itself. Without this the parent
+  // group 404s while its roster stays readable, which is worse than an open
+  // endpoint: it looks gated.
+  if (groupId === HEAVEN_GROUP_ID && !isAdminEmail(c.get('user').email)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
   const db = await getDb();
   const rows = await db
     .select()
@@ -103,6 +109,9 @@ route.get('/:id/members', async (c) => {
 route.get('/:gid/members/:mid', async (c) => {
   const groupId = c.req.param('gid');
   const memberId = c.req.param('mid');
+  if (groupId === HEAVEN_GROUP_ID && !isAdminEmail(c.get('user').email)) {
+    return c.json({ error: 'Not found' }, 404);
+  }
   const db = await getDb();
   const [row] = await db
     .select()
