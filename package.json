@@ -16,6 +16,7 @@
     "lint:web": "pnpm --filter web lint",
     "db:generate": "pnpm --filter db generate",
     "db:migrate": "pnpm --filter db migrate",
-    "typecheck": "pnpm -r --if-present typecheck"
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test:api": "pnpm --filter api test"
   }
 }
