@@ -21,25 +21,41 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 // Batch coalescing — collects keys requested in the same tick.
-let pending: { keys: Set<string>; resolve: (urls: Record<string, string>) => void } | null = null;
+interface PendingBatch {
+  keys: Set<string>;
+  resolve: (urls: Record<string, string>) => void;
+  reject: (err: unknown) => void;
+}
+let pending: PendingBatch | null = null;
 
 function fetchBatch(keys: string[], idToken: string): Promise<Record<string, string>> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (!pending) {
-      pending = { keys: new Set(keys), resolve: () => {} };
+      pending = { keys: new Set(keys), resolve: () => {}, reject: () => {} };
       // Schedule one flush at end of microtask queue
       queueMicrotask(async () => {
         const batch = pending!;
         pending = null;
-        const urls = await getSignedUrls([...batch.keys], idToken);
-        batch.resolve(urls);
+        try {
+          batch.resolve(await getSignedUrls([...batch.keys], idToken));
+        } catch (err) {
+          // Without this, a failed sign-reads call settles nothing: every
+          // caller awaiting this batch hangs forever and the UI is stuck
+          // on "loading" with no error ever surfaced.
+          batch.reject(err);
+        }
       });
     }
     for (const k of keys) pending.keys.add(k);
-    const prev = pending.resolve;
+    const prevResolve = pending.resolve;
+    const prevReject = pending.reject;
     pending.resolve = (urls) => {
-      prev(urls);
+      prevResolve(urls);
       resolve(urls);
+    };
+    pending.reject = (err) => {
+      prevReject(err);
+      reject(err);
     };
   });
 }
@@ -72,7 +88,13 @@ export function useSignedUrls(
     }
 
     if (Object.keys(fresh).length > 0) {
-      setUrls((prev) => ({ ...prev, ...fresh }));
+      // Publishing cache hits is the point of this effect, and the guard keeps
+      // it to renders that actually carry new URLs.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setUrls((prev) => {
+        const changed = Object.keys(fresh).some((k) => prev[k] !== fresh[k]);
+        return changed ? { ...prev, ...fresh } : prev;
+      });
     }
 
     if (stale.length === 0) return;
