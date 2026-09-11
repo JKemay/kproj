@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
@@ -15,19 +15,12 @@ import { Lightbox } from '@/components/ui/Lightbox';
 import { MediaMasonry } from '@/components/ui/MediaMasonry';
 import { MediaTile } from '@/components/ui/MediaTile';
 import { apiFetch } from '@/lib/api';
-import { updateMember } from '@/lib/entities';
+import { type ApiMember, updateMember } from '@/lib/entities';
 import { type Era, listEras } from '@/lib/eras';
 import { type MediaPatch, deleteMedia, thumbKeyFor, updateMedia } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
-interface Member {
-  id: string;
-  groupId: string;
-  stageName: string;
-  position: string | null;
-  bio: string | null;
-  profileMediaKey: string | null;
-}
+type Member = ApiMember;
 
 interface MediaRow {
   id: string;
@@ -58,20 +51,28 @@ function MemberView({ groupId, memberId }: { groupId: string; memberId: string }
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
+  // Guards against a stale response clobbering fresher state — e.g. the user
+  // navigates from one member to another before the first fetch resolves.
+  const loadRequestId = useRef(0);
   const load = useMemo(
     () => () => {
       if (!idToken) return;
+      const requestId = ++loadRequestId.current;
       Promise.all([
         apiFetch<{ member: Member }>(`/groups/${groupId}/members/${memberId}`, { idToken }),
         apiFetch<{ media: MediaRow[] }>(`/media?groupId=${groupId}&memberId=${memberId}`, { idToken }),
         listEras(groupId, idToken),
       ])
         .then(([m, md, er]) => {
+          if (loadRequestId.current !== requestId) return;
           setMember(m.member);
           setMediaRows(md.media);
           setEras(er.eras);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+        .catch((e) => {
+          if (loadRequestId.current !== requestId) return;
+          setError(e instanceof Error ? e.message : String(e));
+        });
     },
     [groupId, memberId, idToken],
   );

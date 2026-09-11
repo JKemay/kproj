@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
@@ -45,9 +45,13 @@ function Heaven() {
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
 
+  // Guards against a stale response clobbering fresher state (matches the
+  // same pattern used on the group/member detail pages).
+  const loadRequestId = useRef(0);
   const load = useMemo(
     () => () => {
       if (!idToken || !isAdmin) return;
+      const requestId = ++loadRequestId.current;
       // Self-provision the reserved group on first visit, then load contents.
       apiFetch(`/groups/${HEAVEN_ID}`, { idToken })
         .catch((e) => {
@@ -67,11 +71,15 @@ function Heaven() {
           ]),
         )
         .then(([md, er]) => {
+          if (loadRequestId.current !== requestId) return;
           setMediaRows(md.media);
           setEras(er.eras);
           setReady(true);
         })
-        .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+        .catch((e) => {
+          if (loadRequestId.current !== requestId) return;
+          setError(e instanceof Error ? e.message : String(e));
+        });
     },
     [idToken, isAdmin],
   );

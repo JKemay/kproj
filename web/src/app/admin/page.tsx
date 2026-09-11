@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 
 import { AppNav } from '@/components/AppNav';
@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { apiFetch } from '@/lib/api';
 import { type Era, createEra, deleteEra, listEras, updateEra } from '@/lib/eras';
 import { type AllowedMime, registerMedia, uploadFiles } from '@/lib/media';
+import { useGroups } from '@/lib/useGroups';
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL?.toLowerCase().trim();
 const ALLOWED: AllowedMime[] = [
@@ -22,10 +23,6 @@ const ALLOWED: AllowedMime[] = [
   'image/avif',
 ];
 
-interface Group {
-  id: string;
-  name: string;
-}
 interface Member {
   id: string;
   stageName: string;
@@ -143,18 +140,13 @@ function CreateGroupForm({ idToken }: { idToken: string | null }) {
 }
 
 function CreateMemberForm({ idToken }: { idToken: string | null }) {
-  const [groups, setGroups] = useState<Group[]>([]);
+  const { groups } = useGroups(idToken);
   const [groupId, setGroupId] = useState('');
   const [id, setId] = useState('');
   const [stageName, setStageName] = useState('');
   const [position, setPosition] = useState('');
   const [bio, setBio] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
-
-  useEffect(() => {
-    if (!idToken) return;
-    apiFetch<{ groups: Group[] }>('/groups', { idToken }).then((r) => setGroups(r.groups)).catch(() => {});
-  }, [idToken]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,7 +185,7 @@ function CreateMemberForm({ idToken }: { idToken: string | null }) {
 }
 
 function ErasSection({ idToken }: { idToken: string | null }) {
-  const [groups, setGroups] = useState<Group[]>([]);
+  const { groups } = useGroups(idToken);
   const [groupId, setGroupId] = useState('');
   const [eras, setEras] = useState<Era[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
@@ -201,11 +193,6 @@ function ErasSection({ idToken }: { idToken: string | null }) {
   const [deleteTarget, setDeleteTarget] = useState<Era | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
-
-  useEffect(() => {
-    if (!idToken) return;
-    apiFetch<{ groups: Group[] }>('/groups', { idToken }).then((r) => setGroups(r.groups)).catch(() => {});
-  }, [idToken]);
 
   const loadEras = (id: string) => {
     setGroupId(id);
@@ -336,7 +323,7 @@ function ErasSection({ idToken }: { idToken: string | null }) {
 const TAG_SUGGESTIONS = ['selca', 'fancam', 'airport', 'stage', 'photoshoot', 'behind', 'mv', 'concert'];
 
 function UploadSection({ idToken }: { idToken: string | null }) {
-  const [groups, setGroups] = useState<Group[]>([]);
+  const { groups } = useGroups(idToken);
   const [members, setMembers] = useState<Member[]>([]);
   const [eras, setEras] = useState<Era[]>([]);
 
@@ -353,11 +340,6 @@ function UploadSection({ idToken }: { idToken: string | null }) {
 
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);
-
-  useEffect(() => {
-    if (!idToken) return;
-    apiFetch<{ groups: Group[] }>('/groups', { idToken }).then((r) => setGroups(r.groups)).catch(() => {});
-  }, [idToken]);
 
   const onGroupChange = (id: string) => {
     setGroupId(id);

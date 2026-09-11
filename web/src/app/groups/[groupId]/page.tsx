@@ -19,26 +19,13 @@ import { MemberCard } from '@/components/ui/MemberCard';
 import { MemberCardSkeleton } from '@/components/ui/MemberCardSkeleton';
 import { TopicHero } from '@/components/ui/TopicHero';
 import { apiFetch } from '@/lib/api';
-import { updateGroup } from '@/lib/entities';
+import { type ApiGroup, type ApiMember, updateGroup } from '@/lib/entities';
 import { type Era, listEras } from '@/lib/eras';
 import { type MediaPatch, deleteMedia, thumbKeyFor, updateMedia } from '@/lib/media';
 import { useSignedUrls } from '@/lib/useSignedUrls';
 
-interface Group {
-  id: string;
-  name: string;
-  kind: 'group' | 'soloist' | 'topic';
-  agency: string | null;
-  debutYear: number | null;
-  coverMediaKey: string | null;
-}
-
-interface Member {
-  id: string;
-  stageName: string;
-  position: string | null;
-  profileMediaKey: string | null;
-}
+type Group = ApiGroup;
+type Member = ApiMember;
 
 interface MediaRow {
   id: string;
@@ -91,7 +78,7 @@ function GroupView({ groupId }: { groupId: string }) {
         },
         idToken,
       );
-      setGroup(res.group as Group);
+      setGroup(res.group);
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

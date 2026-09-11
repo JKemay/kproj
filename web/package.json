@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@kproj/db": "workspace:*",
     "next": "16.2.7",
     "oidc-client-ts": "^3.1.0",
     "react": "19.2.4",

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface SelectOption {
   id: string;
@@ -34,15 +34,30 @@ export function UploadFormShell({
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (resetToken !== undefined) {
-      setFiles([]);
-      setCaption('');
-    }
-  }, [resetToken]);
+  // Clear the file selection when the parent bumps resetToken (e.g. after a
+  // successful upload). Adjusted during render rather than in an effect —
+  // see https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevResetToken, setPrevResetToken] = useState(resetToken);
+  if (resetToken !== prevResetToken) {
+    setPrevResetToken(resetToken);
+    setFiles([]);
+    setCaption('');
+  }
 
-  const previewUrl = files[0] ? URL.createObjectURL(files[0]) : null;
-  const isVideo = files[0]?.type.startsWith('video/');
+  // Object URLs must be revoked or they leak for the life of the tab. Create
+  // one only when the selected file actually changes, and revoke the old one
+  // both on change and on unmount.
+  const firstFile = files[0] ?? null;
+  const previewUrl = useMemo(
+    () => (firstFile ? URL.createObjectURL(firstFile) : null),
+    [firstFile],
+  );
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+  const isVideo = firstFile?.type.startsWith('video/');
 
   const accept = (incoming: FileList | null) => {
     if (!incoming) return;
