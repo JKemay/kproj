@@ -13,7 +13,6 @@
     "build:api": "pnpm --filter api run build:api",
     "build": "pnpm run build:web && pnpm run build:api",
     "package:all": "pnpm --filter api run package:api && pnpm --filter api run package:migrate && pnpm --filter api run package:presignup && pnpm --filter api run package:validate",
-    "typecheck": "pnpm --filter api typecheck",
     "lint:web": "pnpm --filter web lint",
     "db:generate": "pnpm --filter db generate",
     "db:migrate": "pnpm --filter db migrate",
