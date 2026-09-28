@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 interface SelectOption {
   id: string;
@@ -34,14 +34,28 @@ export function UploadFormShell({
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (resetToken !== undefined) {
-      setFiles([]);
-      setCaption('');
-    }
-  }, [resetToken]);
+  // React's documented "adjust state when a prop changes" pattern: setting
+  // state during render re-runs this component immediately without committing
+  // the stale pass, where an effect would commit it and then render again.
+  const [seenResetToken, setSeenResetToken] = useState(resetToken);
+  if (resetToken !== seenResetToken) {
+    setSeenResetToken(resetToken);
+    setFiles([]);
+    setCaption('');
+  }
 
-  const previewUrl = files[0] ? URL.createObjectURL(files[0]) : null;
+  // createObjectURL on every render leaked one blob URL per render, holding the
+  // whole file in memory until the tab closed. Create once per file, and revoke
+  // it when the file changes or the form unmounts.
+  const firstFile = files[0] ?? null;
+  const previewUrl = useMemo(
+    () => (firstFile ? URL.createObjectURL(firstFile) : null),
+    [firstFile],
+  );
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
   const isVideo = files[0]?.type.startsWith('video/');
 
   const accept = (incoming: FileList | null) => {

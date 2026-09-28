@@ -63,7 +63,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!idToken) return;
 
     let cancelled = false;
-    setState({ kind: 'loading' });
+    // No reset to 'loading' here: state already starts that way on mount, and
+    // on a token refresh keeping the current state avoids flashing a spinner
+    // over a page that is already rendered.
     apiFetch<{ user: AppUser }>('/me', { idToken })
       .then((res) => {
         if (!cancelled) setState({ kind: 'allowed', user: res.user });
