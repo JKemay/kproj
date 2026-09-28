@@ -14,7 +14,8 @@
     "package:presignup": "pnpm build:presignup && cd dist && zip ../presignup.zip presignup.mjs && cd ..",
     "package:validate": "pnpm build:validate && cd dist && zip ../validate.zip validate.mjs && cd ..",
     "dev": "tsx watch src/local.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.700.0",
@@ -38,6 +39,7 @@
     "esbuild": "^0.24.0",
     "sharp": "^0.34.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.7"
   }
 }
